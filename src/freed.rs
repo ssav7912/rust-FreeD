@@ -1,16 +1,17 @@
 
-use std::default;
-use std::process::Output;
 use std::vec;
 
 use ux::u24;
 use ux::i24;
 
+const ALL_CAMERAS: u8 = 0xFF;
+
 
 #[derive(Copy, Clone)]
+#[cfg_attr(test, derive(PartialEq, Debug))]
 ///Plain-Old-Data struct that contains payload information for a POSITION_POLL request.
 /// Note that most fields are 24 bit (as required by the protocol spec) - this will panic if you 
-/// attempt to place too large or small values into it. Use the u24::new() (or i24::new()) function to generate values
+/// attempt to place too large or small values into it. Use the `u24::new()` (or `i24::new()`) function to generate values
 /// from literals or primitive integer types. 
 struct PositionPollPayload {
     pitch: i24,
@@ -25,10 +26,8 @@ struct PositionPollPayload {
 }
 
 trait Serialise {
-    const SIZE: usize;
-    type Output;
-    ///Generate an arbitrary array of u8s.
-    fn serialise(self) -> Self::Output;
+    ///Generate an arbitrary array of `u8`s.
+    fn serialise(self) ->  Vec<u8>;
 }
 
 impl Default for PositionPollPayload {
@@ -40,12 +39,9 @@ impl Default for PositionPollPayload {
 }
 
 impl Serialise for PositionPollPayload {
-    const SIZE: usize = 26; 
-    type Output = [u8; Self::SIZE];
-   
-    ///This function serialises a POSITION_POLL payload struct into a u8 bytearray in big endian order.
+    ///This function serialises a `POSITION_POLL` payload struct into a `u8` bytearray in big endian order.
     /// Intended as the last step before transmitting over Serial or UDP.    
-    fn serialise(self) -> [u8; Self::SIZE]{
+    fn serialise(self) -> Vec<u8> {
         let mut serial: [u8; 26] = [0; 26];
         
         let pitch32 : i32 = self.pitch.into();
@@ -81,7 +77,7 @@ impl Serialise for PositionPollPayload {
         serial[serial.len() - 2] = a;
         serial[serial.len() - 1] = b;
 
-        let constserial = serial.clone();
+        let constserial = serial.to_vec();
 
         return constserial;
     }
@@ -89,58 +85,75 @@ impl Serialise for PositionPollPayload {
 }
 
 #[derive(Copy, Clone)]
-enum PayloadStructs {
-    Position(PositionPollPayload),
-}
-
-impl Serialise for PayloadStructs {
-    const SIZE: usize = PositionPollPayload::SIZE;
-
-    type Output = [u8; Self::SIZE];
-
-    fn serialise(self) -> Self::Output {
-        return match self { PayloadStructs::Position(payload) => PositionPollPayload::serialise(payload) }
-    }
-}
-
-#[derive(Copy, Clone)]
-struct Message {
-    command: u8,
+struct Message<T: Serialise + Default> {
+    command: Commands,
     cameraid: u8,
-    payload: PayloadStructs,
+    payload: T,
     checksum: u8
 }
 
-impl Serialise for Message {
-    const SIZE: usize = PositionPollPayload::SIZE + 3;
-    type Output = [u8; Self::SIZE];
+impl<T: Serialise + Default + Copy + Clone> Serialise for Message<T> {
+
     
-    fn serialise(self) -> Self::Output {
+    fn serialise(self) -> Vec<u8> {
         
-        let payloaddata = self.payload.serialise();
-
-        return [[self.command, self.cameraid], payloaddata, [self.generate_checksum(&payloaddata)]].concat()        
+        let payloaddata: Vec<u8> = self.payload.serialise();
+        let mut output = vec![self.command as u8, self.cameraid];
+        output.extend(payloaddata);
+        let checksum = generate_checksum(&output);
+        output.push(checksum);
+        return output;       
     }
 }
 
 
-impl Message {
+impl<T: Serialise + Default> Message<T> {
+    pub fn new(command: Commands, cameraid: u8) -> Message<T> {
+        
+        
+        let payload: T = match command {
+            Commands::STREAM_MODE_START => todo!(),
+            Commands::STREAM_MODE_STOP => todo!(),
+            Commands::FREEZE_MODE_START => todo!(),
+            Commands::POSITION_POLL => <T as Default>::default(), 
+            Commands::SYSTEM_STATUS => todo!(),
+            Commands::SYSTEM_PARAMS => todo!(),
+            Commands::FIRST_TARGET => todo!(),
+            Commands::NEXT_TARGET => todo!(),
+            Commands::FIRST_IMAGE => todo!(),
+            Commands::NEXT_IMAGE => todo!(),
+            _ => todo!()
+        };
 
-
-    fn generate_checksum(self, serialised: &[u8]) -> u8 {
-        let mut checksum: u8 = 0x40;
-        for byte in serialised{
-            checksum = checksum - byte;
-        }
-
-        return checksum%255; //spec says 256.. verify.
+        Message {command: command, cameraid: cameraid, payload: payload, checksum: 0 }
     }
+    //reset this to return a mutable reference.
+    ///Gets a copy of the payload struct
+    pub fn get_payload(self) -> T {
+        return self.payload;
+        
+    }
+
+    //Sets the payload struct. Note that the new payload must be the same type as the one retrieved from the message.
+    pub fn set_payload(&mut self, payload: T) {
+        self.payload = payload;
+    } 
+
+
 }
 
-pub fn createMessage<T: Serialise>(command: u8, cameraid: u8, payload: T) -> Vec<u8>{
-    [[command, cameraid], payload.serialise(), [0x00]].concat()
+//pull this out to public function? Doesn't depend on type
+fn generate_checksum(serialised: &[u8]) -> u8 {
+    let mut checksum: u8 = 0x40;
+    for byte in serialised{
+        checksum = (checksum - byte)%255;
+    }
+
+    return checksum; //spec says 256.. verify.
 }
 
+#[allow(non_camel_case_types)]
+#[derive(Copy, Clone)]
 enum Commands {
     STREAM_MODE_STOP = 0x00,
     STREAM_MODE_START = 0x01,
@@ -206,7 +219,7 @@ mod test {
         assert_eq!(serial[2], testpitchbytes[3]);
 
         //reconstructing pitch from array bytes preserves semantics (=-1000)
-        let mut pitchreconstruct : [u8; 4] = [0xFF;4]; //hack sign-extension in. Not in the spirit of testing. Not super important?
+        let mut pitchreconstruct: [u8; 4] = [0xFF;4]; //hack sign-extension in. Not in the spirit of testing. Not super important?
         let pitchslice = &serial[0..3];
         assert_eq!(pitchslice.len(), 3);
         pitchreconstruct[1..].clone_from_slice(pitchslice);
@@ -225,5 +238,69 @@ mod test {
         assert_eq!(slice.len(), 3);
         finalvals[1..].clone_from_slice(slice);
         assert_eq!(u32::from_be_bytes(finalvals), testfocus);
+    }
+
+    #[test]
+    fn message_new() {
+        let message = Message::<PositionPollPayload>::new(Commands::POSITION_POLL, ALL_CAMERAS);
+        
+        assert_eq!(message.command as u8, Commands::POSITION_POLL as u8);
+        assert_eq!(message.cameraid, ALL_CAMERAS);
+        
+        let payload: PositionPollPayload = message.get_payload();
+        let testpayload: PositionPollPayload = PositionPollPayload::default();
+        assert_eq!(payload, testpayload);
+    }
+
+    #[test]
+    fn message_payload_get_and_set() {
+        let testpitch = i24::new(-1000);
+        let testzoom = u24::new(25000);
+
+        let mut message = Message::<PositionPollPayload>::new(Commands::POSITION_POLL, ALL_CAMERAS);
+        
+        let mut payload: PositionPollPayload = message.get_payload();
+        let testpayload: PositionPollPayload = PositionPollPayload::default();
+        assert_eq!(payload, testpayload);
+
+        payload.pitch = testpitch;
+        payload.zoom = testzoom;
+
+        message.set_payload(payload);
+
+        let newpayload = message.get_payload();
+        println!("{:?}", newpayload);
+        assert_eq!(newpayload.pitch, testpitch);
+        assert_eq!(newpayload.zoom, testzoom);
+    }
+
+    #[test]
+    fn checksum_simple() {
+        let array: [u8; 5] = [1, 2, 3, 4, 5];
+        assert_eq!(generate_checksum(&array), 49);
+    }
+
+    #[test]
+    fn message_serialise() {
+        let testpitch = i24::new(-1000);
+        let testzoom = u24::new(25000);
+
+        let mut message: Message<PositionPollPayload> = Message::new(Commands::POSITION_POLL, ALL_CAMERAS);
+
+        let mut payload = message.get_payload();
+        payload.pitch = testpitch;
+        payload.zoom = testzoom;
+
+        message.set_payload(payload);
+
+        let serial = message.serialise();
+        println!("{:?}",serial);
+        
+        assert_eq!(serial.len(), 29);
+        assert_eq!(serial[0], Commands::POSITION_POLL as u8);
+        assert_eq!(serial[1], ALL_CAMERAS);
+
+        assert_eq!(serial[serial.len()-1], generate_checksum(&serial[..serial.len()-1]));
+
     }
 }
