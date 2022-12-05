@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 ux = "0.1.5"
+bitflags = "2.0.0-rc.1"
