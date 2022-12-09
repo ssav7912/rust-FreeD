@@ -1,9 +1,15 @@
 use crate::common::*;
 
+use std::any::TypeId;
+use std::task::Poll;
 use std::vec;
 
 use ux::i24;
 use ux::u24;
+
+
+        
+
 
 
 #[derive(Copy, Clone)]
@@ -19,9 +25,39 @@ impl Default for PollPayload {
 }
 
 impl Serialise for PollPayload {
+    const COMMAND: Commands = Commands::POSITION_POLL; //unused? 
     fn serialise(self) ->  Vec<u8> {
         return vec![self.command as u8];
     }
+
+    fn deserialise<T: Serialise>(array: &[u8]) -> Result<T, String> {
+       assert!(array.len() == 1); //otherwise incorrect payload
+    
+       let command: Commands = array[0].try_into()?; 
+       
+
+       return Ok(T {command: command});
+    }
+}
+
+pub enum Payloads {
+    PollPayload(PollPayload),
+    PositionPollPayload,
+    SystemStatusPayload,
+    SystemControlPayload,
+    TargetDataPayload,
+    ImageDataPayload,
+    EEPROMDataPayload,
+    EEPROMDataRequestPayload,
+    CameraCalibrationPayload,
+    DiagnosticModePayload,
+
+}
+
+fn deserialise(array: &[u8]) -> Payloads {
+
+    return Payloads::PollPayload(PollPayload {command: Commands::FIRST_IMAGE})
+    
 }
 
 #[derive(Copy, Clone)]
@@ -53,6 +89,14 @@ struct SystemControlPayload {
     minwhitepixels: u8 
 }
 
+impl Serialise for SystemControlPayload {
+    const COMMAND: Commands = Commands::SYSTEM_PARAMS;
+    fn serialise(self) ->  Vec<u8> {
+        return vec![self.studioid, self.smoothing, self.maxasymmetry, self.halfboxwidth, 
+                self.blackvidthreshold, self.whitevidthreshold, self.blackvidclip, self.whitevidclip, self.maxblackpixels, self.minwhitepixels]
+    }
+}
+
 #[derive(Copy, Clone, Default)]
 struct TargetDataPayload {
     studioid: u8,
@@ -64,6 +108,19 @@ struct TargetDataPayload {
 
 }
 
+impl Serialise for TargetDataPayload {
+    const COMMAND: Commands = Commands::FIRST_TARGET;
+    fn serialise(self) ->  Vec<u8> {
+        let targetarray = [self.targetx, self.targety, self.targetz, self.targetflags];
+        let mut serial = vec![self.studioid];
+        serial.extend(self.targetnumber.to_be_bytes().iter());
+        serial.extend(serialisei24array(&targetarray));
+
+        return serial;
+    }
+}
+
+
 #[derive(Copy, Clone, Default)]
 struct ImageDataPayload {
     targetindex: u8,
@@ -74,11 +131,37 @@ struct ImageDataPayload {
     yerror: i24,
 }
 
+impl Serialise for ImageDataPayload {
+    const COMMAND: Commands = Commands::FIRST_IMAGE;
+    fn serialise(self) ->  Vec<u8> {
+        
+        let targettuple = [self.targetx, self.targety, self.xerror, self.yerror];
+        let mut serial = vec![self.targetindex];
+        serial.extend(self.targetnum.to_be_bytes().iter());
+        serial.extend(serialisei24array(&targettuple));
+        return serial; 
+    }
+
+}
+
 #[derive(Copy, Clone, Default)]
 struct EEPROMDataPayload {
     EEPROMaddress: u16,
-    EEPROMData: [u8; 16],
+    EEPROMdata: [u8; 16],
 }
+
+impl Serialise for EEPROMDataPayload {
+    const COMMAND: Commands =  Commands::EEPROM_DATA;
+    fn serialise(self) ->  Vec<u8> {
+
+        let mut serial = self.EEPROMaddress.to_be_bytes().to_vec();
+        let databytes = self.EEPROMdata;
+        serial.extend(databytes.iter());
+
+        return serial;
+    }
+}
+
 
 
 #[derive(Copy, Clone, Default)]
@@ -86,12 +169,20 @@ struct EEPROMDataRequestPayload {
     EEPROMaddress: u16,
 }
 
+impl Serialise for EEPROMDataRequestPayload {
+    const COMMAND: Commands = Commands::REQUEST_EEPROM;
+    fn serialise(self) ->  Vec<u8> {
+        let bytes = self.EEPROMaddress.to_be_bytes();
+        return bytes.to_vec();
+    }
+}
+
 #[derive(Copy, Clone, Default)]
 struct CameraCalibrationPayload {
     lenscentrex: i24,
     lenscentrey: i24,
     lensscalex: i24,
-    lesscaley: i24,
+    lensscaley: i24,
     lensdistortiona: i24,
     lensdistortionb: i24,
     xoffset: i24,
@@ -99,9 +190,27 @@ struct CameraCalibrationPayload {
     zoffset: i24
 }
 
+impl Serialise for CameraCalibrationPayload {
+    const COMMAND: Commands = Commands::CAMERA_CALIBRATION;
+    fn serialise(self) ->  Vec<u8> {
+        let order = [self.lenscentrex, self.lenscentrey, self.lensscalex, self.lensscaley,
+        self.lensdistortiona, self.lensdistortionb, self.xoffset, self.yoffset, self.zoffset];
+        
+        return serialisei24array(&order);
+    }
+
+}
+
 #[derive(Copy, Clone, Default)]
 struct DiagnosticModePayload {
     diagnosticflag: DiagnosticModes
+}
+
+impl Serialise for DiagnosticModePayload {
+    const COMMAND: Commands = Commands::DIAGNOSTIC_MODE;
+    fn serialise(self) ->  Vec<u8> {
+        return vec![self.diagnosticflag as u8];
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -121,7 +230,7 @@ struct PositionPollPayload {
     pos_x: i24,
     zoom: u24,
     focus: u24,
-    userdefined: u16,
+    userdefined: u16, //arbitrary [u8; 2]?
 }
 
 impl Default for PositionPollPayload {
@@ -141,6 +250,7 @@ impl Default for PositionPollPayload {
 }
 
 impl Serialise for PositionPollPayload {
+    const COMMAND: Commands = Commands::POSITION_POLL;
     ///This function serialises a `POSITION_POLL` payload struct into a `u8` bytearray in big endian order.
     /// Intended as the last step before transmitting over Serial or UDP.    
     fn serialise(self) -> Vec<u8> {
@@ -184,8 +294,10 @@ impl Serialise for PositionPollPayload {
     }
 }
 
+
+
 #[derive(Copy, Clone)]
-struct Message<T: Serialise + Default> {
+pub struct Message<T: Serialise + Default> {
     command: Commands,
     cameraid: u8,
     payload: T,
@@ -193,6 +305,7 @@ struct Message<T: Serialise + Default> {
 }
 
 impl<T: Serialise + Default + Copy + Clone> Serialise for Message<T> {
+    const COMMAND: Commands = Commands::POSITION_POLL; //unused? Feasibly could pass Message as T :|
     fn serialise(self) -> Vec<u8> {
         let payloaddata: Vec<u8> = self.payload.serialise();
         let mut output = vec![self.command as u8, self.cameraid];
@@ -204,20 +317,10 @@ impl<T: Serialise + Default + Copy + Clone> Serialise for Message<T> {
 }
 
 impl<T: Serialise + Default> Message<T> {
-    pub fn new(command: Commands, cameraid: u8) -> Message<T> {
-        let payload: T = match command {
-            Commands::STREAM_MODE_START => todo!(),
-            Commands::STREAM_MODE_STOP => todo!(),
-            Commands::FREEZE_MODE_START => todo!(),
-            Commands::POSITION_POLL => <T as Default>::default(),
-            Commands::SYSTEM_STATUS => todo!(),
-            Commands::SYSTEM_PARAMS => todo!(),
-            Commands::FIRST_TARGET => todo!(),
-            Commands::NEXT_TARGET => todo!(),
-            Commands::FIRST_IMAGE => todo!(),
-            Commands::NEXT_IMAGE => todo!(),
-            _ => todo!(),
-        };
+    
+    pub fn new(cameraid: u8) -> Message<T> {
+        let payload: T = <T as Default>::default();
+        let command: Commands = <T as Serialise>::COMMAND;
 
         Message {
             command: command,
@@ -249,6 +352,41 @@ fn generate_checksum(serialised: &[u8]) -> u8 {
     return (checksum % 256).try_into().unwrap(); //spec says 256.. verify.
 }
 
+
+impl Message<TargetDataPayload> {
+    fn newCommand(&mut self, command: Commands) {
+        if command != Commands::FIRST_TARGET || command != Commands::NEXT_TARGET {
+            panic!("Only FIRST_TARGET or NEXT_TARGET commands may be used with a TargetDataPayload");
+        }
+        self.command = command;
+    }
+}
+
+fn isValidMessage<T: Serialise>(array: &[u8]) -> bool {
+    let command: Result<Commands, String> = array[0].try_into();
+
+    let commandCorrect: bool = match command {
+        _ => command.unwrap() == T::COMMAND, 
+        Err(_) => false
+    };
+
+    //when is it possible for different arrays to have the same checksum?
+    let checksumCorrect = generate_checksum(&array) == array[array.len() - 1];
+
+    return commandCorrect && checksumCorrect
+}
+
+
+fn serialisei24array(array: &[ux::i24]) -> Vec<u8> {
+    let mut serial = Vec::<u8>::new();
+
+    for element in array {
+        let elementi32: i32 = (*element).into();
+
+        serial.extend_from_slice(&elementi32.to_be_bytes()[..3]);
+    }
+    return serial;
+}
 
 
 
@@ -330,7 +468,7 @@ mod test {
 
     #[test]
     fn message_new() {
-        let message = Message::<_>::new(Commands::POSITION_POLL, ALL_CAMERAS);
+        let message = Message::<PositionPollPayload>::new(ALL_CAMERAS);
 
         assert_eq!(message.command as u8, Commands::POSITION_POLL as u8);
         assert_eq!(message.cameraid, ALL_CAMERAS);
@@ -345,7 +483,7 @@ mod test {
         let testpitch = i24::new(-1000);
         let testzoom = u24::new(25000);
 
-        let mut message = Message::<PositionPollPayload>::new(Commands::POSITION_POLL, ALL_CAMERAS);
+        let mut message = Message::<PositionPollPayload>::new( ALL_CAMERAS);
 
         let mut payload: PositionPollPayload = message.get_payload();
         let testpayload: PositionPollPayload = PositionPollPayload::default();
@@ -374,7 +512,7 @@ mod test {
         let testzoom = u24::new(25000);
 
         let mut message: Message<PositionPollPayload> =
-            Message::new(Commands::POSITION_POLL, ALL_CAMERAS);
+            Message::new( ALL_CAMERAS);
 
         let mut payload = message.get_payload();
         payload.pitch = testpitch;
