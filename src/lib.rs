@@ -1,26 +1,33 @@
-mod freed;
+pub mod freed;
 
-mod common {
+pub mod common {
+    use std::fmt;
+
     use bitflags::bitflags;
     pub const ALL_CAMERAS: u8 = 0xFF;
     pub trait Serialise {
         const COMMAND: Commands = Commands::DIAGNOSTIC_MODE;
         ///Generate an arbitrary array of `u8`s.
         fn serialise(self) -> Vec<u8>;
+    }
+    pub trait Deserialise {
+        type Output;
+        fn deserialise(array: &[u8]) -> Result<Self::Output, DeserialiseError>;
+    }
 
-        fn deserialise<T: Serialise + Default>(
-            array: &[u8],
-        ) -> Result<T, String> {
-            
-
-            todo!()
+    #[derive(Debug, Clone)]
+    pub struct DeserialiseError {
+        pub description: String,
+    }
+    impl fmt::Display for DeserialiseError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "{}", self.description)
         }
     }
 
     trait Command {
         const COMMAND: Commands;
     }
-
 
     ///NewType wrapper for RMS error - each unit is 1/32768th of a pixel.
     #[derive(Copy, Clone)]
@@ -68,7 +75,7 @@ mod common {
                 x if x == Self::FIRST_TARGET as u8 => Ok(Self::FIRST_TARGET),
                 x if x == Self::NEXT_TARGET as u8 => Ok(Self::NEXT_TARGET),
                 x if x == Self::FIRST_IMAGE as u8 => Ok(Self::FIRST_IMAGE),
-                x if x == Self::NEXT_IMAGE as u8 => Ok(Self::NEXT_IMAGE), 
+                x if x == Self::NEXT_IMAGE as u8 => Ok(Self::NEXT_IMAGE),
                 x if x == Self::EEPROM_DATA as u8 => Ok(Self::EEPROM_DATA),
                 x if x == Self::REQUEST_EEPROM as u8 => Ok(Self::REQUEST_EEPROM),
                 x if x == Self::CAMERA_CALIBRATION as u8 => Ok(Self::CAMERA_CALIBRATION),
@@ -77,8 +84,6 @@ mod common {
             }
         }
     }
-
-
 
     #[allow(non_camel_case_types)]
     #[derive(Copy, Clone)]
@@ -101,8 +106,14 @@ mod common {
         I2C_OVERFLOW = 96,
     }
 
+    impl Default for SystemStatus {
+        fn default() -> Self {
+            Self::SYSTEM_NORMAL
+        }
+    }
+
     bitflags! {
-        #[derive(Copy, Clone)]
+        #[derive(Copy, Clone, Default)]
         pub struct LEDFlags: u8 {
             const VIDEO_PRESENT   = 0b00000001;
             const VIDEO_OK        = 0b00000010;
@@ -117,7 +128,7 @@ mod common {
     }
 
     bitflags! {
-        #[derive(Copy, Clone)]
+        #[derive(Copy, Clone, Default)]
         pub struct SwitchSettingFlags: u8 {
             const S5_HEX_00   = 0b00000001;
             const S5_HEX_01   = 0b00000010;
@@ -139,19 +150,29 @@ mod common {
         INTERNAL_ERROR = -4,
     }
 
+    impl Default for DSPError {
+        fn default() -> Self {
+            Self::TOO_FEW_TARGETS
+        }
+    }
+
     #[derive(Copy, Clone)]
     pub enum DSPStatus {
         Error(DSPError),
         Iterations(i8),
     }
 
-    #[derive(Copy, Clone, Default)]
-
+    #[derive(Copy, Clone)]
     pub enum DiagnosticModes {
-        #[default]
         NORMAL_OPERATION = 0x00,
         VIDEO_DATA_0x55 = 0x40,
         VIDEO_DATA_0xAA = 0x80,
         VIDEO_DATA_TEST = 0xC0,
+    }
+
+    impl Default for DiagnosticModes {
+        fn default() -> Self {
+            Self::NORMAL_OPERATION
+        }
     }
 }
