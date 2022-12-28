@@ -9,10 +9,14 @@ pub mod common {
         const COMMAND: Commands = Commands::DIAGNOSTIC_MODE;
         ///Generate an arbitrary array of `u8`s.
         fn serialise(self) -> Vec<u8>;
+
     }
+    //move this into the serialise trait -
     pub trait Deserialise {
-        type Output;
-        fn deserialise(array: &[u8]) -> Result<Self::Output, DeserialiseError>;
+        // type Output;
+        ///Deserialises an arbitrary array into the associated `Output` payload type, 
+        /// or returns an error if this was not possible for some reason.
+        fn deserialise(array: &[u8]) -> Result<Self, DeserialiseError> where Self: Sized;
     }
 
     #[derive(Debug, Clone)]
@@ -23,10 +27,6 @@ pub mod common {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "{}", self.description)
         }
-    }
-
-    trait Command {
-        const COMMAND: Commands;
     }
 
     ///NewType wrapper for RMS error - each unit is 1/32768th of a pixel.
@@ -42,7 +42,9 @@ pub mod common {
     pub struct Millimetre32768th(pub ux::i24);
 
     #[allow(non_camel_case_types)]
-    #[derive(Copy, Clone, PartialEq)]
+    #[derive(Copy, Clone, PartialEq, Debug)]
+
+    ///Command bytes that may be used to specify payloads or signal the freed unit.
     pub enum Commands {
         STREAM_MODE_STOP = 0x00,
         STREAM_MODE_START = 0x01,
@@ -56,11 +58,11 @@ pub mod common {
         FIRST_IMAGE = 0xD6,
         NEXT_IMAGE = 0xD7,
         EEPROM_DATA = 0xD8,
-        REQUEST_EEPROM = 0xD9, //not in the source set of commands for D0...
+        REQUEST_EEPROM = 0xD9, //not in the source set of commands for 0xD0...
         CAMERA_CALIBRATION = 0xDA,
         DIAGNOSTIC_MODE = 0xDB,
     }
-    //sucks
+    //sucks. Write macro to autogenerate?
     impl TryFrom<u8> for Commands {
         type Error = String;
         fn try_from(value: u8) -> Result<Self, Self::Error> {
@@ -87,6 +89,8 @@ pub mod common {
 
     #[allow(non_camel_case_types)]
     #[derive(Copy, Clone)]
+    ///Set of possible status codes the freed unit may report as part of 
+    /// a 'system status' payload.
     pub enum SystemStatus {
         SYSTEM_NORMAL = 0,
         PROCESSOR_RESET = 1,
@@ -114,6 +118,7 @@ pub mod common {
 
     bitflags! {
         #[derive(Copy, Clone, Default)]
+        ///bitfield of possible flags that may be set for the freed LED indicator.
         pub struct LEDFlags: u8 {
             const VIDEO_PRESENT   = 0b00000001;
             const VIDEO_OK        = 0b00000010;

@@ -1,4 +1,5 @@
 
+
 use crate::common::*;
 
 use std::fmt;
@@ -26,10 +27,10 @@ impl Serialise for PollPayload {
     fn serialise(self) -> Vec<u8> {
         return vec![self.command as u8];
     }
+
 }
 
 impl Deserialise for PollPayload {
-    type Output = PollPayload;
 
     fn deserialise(array: &[u8]) -> Result<PollPayload, DeserialiseError> {
         let command: Commands = match array[0].try_into() {
@@ -41,7 +42,7 @@ impl Deserialise for PollPayload {
     }
 }
 
-fn deserialise(data: &[u8]) -> Result<MessageTest, DeserialiseError> {
+fn deserialise<T: Serialise + Default + Deserialise>(data: &[u8]) -> Result<Message<T>, DeserialiseError> {
     if data.len() < 4 {
         return Err(DeserialiseError {
             description: "Misformed data - the protocol defines no messages smaller than 4 bytes"
@@ -62,13 +63,15 @@ fn deserialise(data: &[u8]) -> Result<MessageTest, DeserialiseError> {
         Err(x) => return Err(DeserialiseError { description: x }),
     };
 
-    let payload = match command {
-        Commands::POSITION_POLL => Payloads::PositionPollPayload(PositionPollPayload::deserialise(
-            &data[3..data.len() - 1],
-        )?),
-        _ => todo!(),
-    };
-    return Ok(MessageTest {command: command, cameraid: cameraid, payload: payload, checksum: checksum})
+    let payload: T = T::deserialise(&data[3..data.len()-1]).unwrap();
+
+    // let payload = match command {
+    //     Commands::POSITION_POLL => Payloads::PositionPollPayload(PositionPollPayload::deserialise(
+    //         &data[3..data.len() - 1],
+    //     )?),
+    //     _ => todo!(),
+    // };
+    return Ok(Message::<T> {command: command, cameraid: cameraid, payload: payload, checksum: checksum})
 }
 
 struct MessageTest {
@@ -385,10 +388,10 @@ impl Serialise for PositionPollPayload {
 }
 
 impl Deserialise for PositionPollPayload {
-    type Output = PositionPollPayload;
+    // type Output = PositionPollPayload;
 
     //only way to recover from these is to ask for another message
-    fn deserialise(array: &[u8]) -> Result<Self::Output, DeserialiseError> {
+    fn deserialise(array: &[u8]) -> Result<Self, DeserialiseError> {
         const SIZE: usize = 29 - 3;
         const PAYLOADID: &str = "PositionPollPayload";
         if array.len() < SIZE || array.len() > SIZE {
@@ -417,15 +420,26 @@ impl Deserialise for PositionPollPayload {
     }
 }
 
-impl From<Payloads> for PositionPollPayload {
-    fn from(x: Payloads) -> Self {
-        return match x {
-            Payloads::PositionPollPayload(x) => x,
-            _=> todo!()
+impl TryFrom<Payloads> for PositionPollPayload {
+    type Error = DeserialiseError;
+
+    fn try_from(value: Payloads) -> Result<Self, Self::Error> {
+        return match value {
+            Payloads::PositionPollPayload(x) => Ok(x),
+            _=> Err(DeserialiseError { description: "Not a position poll payload".to_string() })
         }
     }
 }
 
+///Message type for serialising and deserialising protocol messages. 
+/// Once you have selected and filled out a payload struct, it can be wrapped
+/// into a message with `Message::new()`. This will instantiate a message with
+/// the correct command, cameraid and checksum. The message may then be serialised
+/// into a `Vec<u8>` with `Message::serialise(self)`, which can then be sent over UDP or similar.
+/// 
+/// Certain structs, like `ImageDataPayload` and `TargetDataPayload` may be used with
+/// more than one command. For these types extra methods are implemented to allow you to
+/// change the command. The default command used is `FIRST_[type]`. 
 #[derive(Copy, Clone)]
 pub struct Message<T: Serialise + Default> {
     command: Commands,
@@ -447,10 +461,11 @@ impl<T: Serialise + Default + Copy + Clone> Serialise for Message<T> {
 }
 
 impl<T: Serialise + Default> Message<T> {
-    pub fn new(cameraid: u8) -> Message<T> {
-        let payload: T = <T as Default>::default();
+    pub fn new(payload: T, cameraid: u8) -> Message<T> {
+        let payload: T = payload;
         let command: Commands = <T as Serialise>::COMMAND;
 
+        
         Message {
             command: command,
             cameraid: cameraid,
@@ -725,7 +740,8 @@ mod test {
 
     #[test]
     fn message_new() {
-        let message = Message::<PositionPollPayload>::new(ALL_CAMERAS);
+        let inpayload = PositionPollPayload::default();
+        let message = Message::new(inpayload, ALL_CAMERAS);
 
         assert_eq!(message.command as u8, Commands::POSITION_POLL as u8);
         assert_eq!(message.cameraid, ALL_CAMERAS);
@@ -740,7 +756,9 @@ mod test {
         let testpitch = i24::new(-1000);
         let testzoom = u24::new(25000);
 
-        let mut message = Message::<PositionPollPayload>::new(ALL_CAMERAS);
+        let inpayload = PositionPollPayload::default();
+
+        let mut message = Message::new(inpayload, ALL_CAMERAS);
 
         let mut payload: PositionPollPayload = message.get_payload();
         let testpayload: PositionPollPayload = PositionPollPayload::default();
@@ -768,7 +786,9 @@ mod test {
         let testpitch = i24::new(-1000);
         let testzoom = u24::new(25000);
 
-        let mut message: Message<PositionPollPayload> = Message::new(ALL_CAMERAS);
+        let inpayload = PositionPollPayload::default();
+
+        let mut message: Message<PositionPollPayload> = Message::new(inpayload, ALL_CAMERAS);
 
         let mut payload = message.get_payload();
         payload.pitch = testpitch;
@@ -791,8 +811,10 @@ mod test {
 
     #[test]
     fn message_deserialise() {
+
+        let inpayload = PositionPollPayload::default();
         
-        let mut msg = Message::<PositionPollPayload>::new(ALL_CAMERAS);
+        let mut msg = Message::new(inpayload, ALL_CAMERAS);
         let mut payload = msg.get_payload();
         payload.roll = i24::new(55555);
         msg.set_payload(payload);
@@ -800,14 +822,9 @@ mod test {
 
         let serial = msg.serialise();
 
-        let deserialised = deserialise(&serial).unwrap();
+        let deserialised: Message<PositionPollPayload> = deserialise(&serial).unwrap();
 
-        let p: PositionPollPayload = deserialised.payload.into(); 
-        let y = match deserialised.payload {
-            Payloads::PositionPollPayload(x) => x,
-            Payloads::CameraCalibrationPayload(z) => z,
-            _=> todo!()
-        }
-
+        let p: PositionPollPayload = deserialised.payload.try_into().unwrap(); 
+        
     }
 }
