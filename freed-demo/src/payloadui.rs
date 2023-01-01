@@ -1,6 +1,6 @@
 use std::vec;
 
-use freed::freed::{PositionPollPayload, PollPayload};
+use freed::freed::*;
 use tui::{backend::Backend, layout::{Rect, Layout, Direction, Constraint}, Frame, widgets::{Table, Paragraph, Block, Cell, Row, Borders}};
 
 use crate::even_columns;
@@ -76,5 +76,11 @@ impl StructUI for PositionPollPayload {
         let table = Table::new(rows).header(header).block(Block::default().borders(Borders::ALL)).
         widths(binding.as_ref());
         f.render_widget(table, innerlayout[1]);
+    }
+}
+
+impl StructUI for SystemStatusPayload {
+    fn to_array_of_strings(self) -> Vec<[String; 3]> {
+        vec!["Switch Setting", self.switchsetting.to_string(), ]
     }
 }

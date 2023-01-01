@@ -8,7 +8,7 @@ use std::vec;
 use ux::i24;
 use ux::u24;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 ///Wrapper for a simple poll command.
 pub struct PollPayload {
     pub command: Commands,
@@ -80,7 +80,6 @@ struct MessageTest {
     payload: Payloads,
     checksum: u8
 }
-
 enum Payloads {
     PollPayload(PollPayload),
     PositionPollPayload(PositionPollPayload),
@@ -96,7 +95,7 @@ enum Payloads {
 
 
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct SystemStatusPayload {
     pub switchsetting: SwitchSettingFlags,
     pub ledindication: LEDFlags,
@@ -157,7 +156,7 @@ impl Serialise for SystemStatusPayload {
     }
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct SystemControlPayload {
     pub studioid: u8,
     pub smoothing: u8,
@@ -189,7 +188,7 @@ impl Serialise for SystemControlPayload {
     }
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct TargetDataPayload {
     pub studioid: u8,
     pub targetnumber: u16,
@@ -211,7 +210,7 @@ impl Serialise for TargetDataPayload {
     }
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct ImageDataPayload {
     pub targetindex: u8,
     pub targetnum: u16,
@@ -232,7 +231,7 @@ impl Serialise for ImageDataPayload {
     }
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct EEPROMDataPayload {
     pub EEPROMaddress: u16,
     pub EEPROMdata: [u8; 16],
@@ -249,7 +248,7 @@ impl Serialise for EEPROMDataPayload {
     }
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct EEPROMDataRequestPayload {
     pub EEPROMaddress: u16,
 }
@@ -262,7 +261,7 @@ impl Serialise for EEPROMDataRequestPayload {
     }
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct CameraCalibrationPayload {
     pub lenscentrex: i24,
     pub lenscentrey: i24,
@@ -294,7 +293,7 @@ impl Serialise for CameraCalibrationPayload {
     }
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct DiagnosticModePayload {
     pub diagnosticflag: DiagnosticModes,
 }
@@ -306,8 +305,8 @@ impl Serialise for DiagnosticModePayload {
     }
 }
 
-#[derive(Copy, Clone)]
-#[cfg_attr(test, derive(PartialEq, Debug))]
+#[derive(Copy, Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 ///Plain-Old-Data struct that contains payload information for a POSITION_POLL request.
 /// Note that most fields are 24 bit (as required by the protocol spec) - this will panic if you
 /// attempt to place too large or small values into it. Use the `u24::new()` (or `i24::new()`) function to generate values
@@ -440,7 +439,7 @@ impl TryFrom<Payloads> for PositionPollPayload {
 /// Certain structs, like `ImageDataPayload` and `TargetDataPayload` may be used with
 /// more than one command. For these types extra methods are implemented to allow you to
 /// change the command. The default command used is `FIRST_[type]`. 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Message<T: Serialise + Default> {
     command: Commands,
     pub cameraid: u8,

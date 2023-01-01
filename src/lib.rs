@@ -1,7 +1,8 @@
 pub mod freed;
 
 pub mod common {
-    use std::fmt;
+    use std::fmt::{self, write, Display};
+
 
     use bitflags::bitflags;
     pub const ALL_CAMERAS: u8 = 0xFF;
@@ -37,8 +38,8 @@ pub mod common {
     #[cfg_attr(test, derive(PartialEq, Debug))]
     pub struct Millimetre64th(pub ux::i24);
 
-    #[derive(Copy, Clone)]
-    #[cfg_attr(test, derive(PartialEq, Debug))]
+    #[derive(Copy, Clone, Debug)]
+    #[cfg_attr(test, derive(PartialEq))]
     pub struct Millimetre32768th(pub ux::i24);
 
     #[allow(non_camel_case_types)]
@@ -87,8 +88,31 @@ pub mod common {
         }
     }
 
+    impl Display for Commands{
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            Self::STREAM_MODE_START => "Stream Mode Start",
+            Self::STREAM_MODE_STOP => "Stream Mode Stop",
+            Self::FREEZE_MODE_START => "Freeze Mode Start",
+            Self::FREEZE_MODE_STOP => "Freeze Mode Stop",
+            Self::POSITION_POLL => "Position Poll",
+            Self::SYSTEM_STATUS => "System Status",
+            Self::SYSTEM_PARAMS => "System Params",
+            Self::FIRST_TARGET => "First Target",
+            Self::NEXT_TARGET => "Next Target",
+            Self::FIRST_IMAGE => "First Image",
+            Self::NEXT_IMAGE => "Next Image",
+            Self::EEPROM_DATA => "EEPROM Data",
+            Self::REQUEST_EEPROM => "Request EEPROM",
+            Self::CAMERA_CALIBRATION => "Camera Calibration",
+            Self::DIAGNOSTIC_MODE => "Diagnostic Mode"
+            
+        })
+    }
+    }
+
     #[allow(non_camel_case_types)]
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     ///Set of possible status codes the freed unit may report as part of 
     /// a 'system status' payload.
     pub enum SystemStatus {
@@ -110,6 +134,7 @@ pub mod common {
         I2C_OVERFLOW = 96,
     }
 
+
     impl Default for SystemStatus {
         fn default() -> Self {
             Self::SYSTEM_NORMAL
@@ -117,7 +142,7 @@ pub mod common {
     }
 
     bitflags! {
-        #[derive(Copy, Clone, Default)]
+        #[derive(Copy, Clone, Default, Debug)]
         ///bitfield of possible flags that may be set for the freed LED indicator.
         pub struct LEDFlags: u8 {
             const VIDEO_PRESENT   = 0b00000001;
@@ -133,7 +158,7 @@ pub mod common {
     }
 
     bitflags! {
-        #[derive(Copy, Clone, Default)]
+        #[derive(Copy, Clone, Default, Debug)]
         pub struct SwitchSettingFlags: u8 {
             const S5_HEX_00   = 0b00000001;
             const S5_HEX_01   = 0b00000010;
@@ -147,7 +172,7 @@ pub mod common {
     }
 
     #[allow(non_camel_case_types)]
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     pub enum DSPError {
         TOO_FEW_TARGETS = -1,
         ITERATION_CONVERGE_FAIL = -2,
@@ -161,13 +186,14 @@ pub mod common {
         }
     }
 
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     pub enum DSPStatus {
         Error(DSPError),
         Iterations(i8),
     }
 
-    #[derive(Copy, Clone)]
+    #[allow(non_camel_case_types)]
+    #[derive(Copy, Clone, Debug)]
     pub enum DiagnosticModes {
         NORMAL_OPERATION = 0x00,
         VIDEO_DATA_0x55 = 0x40,
