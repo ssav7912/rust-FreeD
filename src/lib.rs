@@ -134,6 +134,29 @@ pub mod common {
         I2C_OVERFLOW = 96,
     }
 
+    impl Display for SystemStatus {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", match self {
+                Self::SYSTEM_NORMAL => "System Normal",
+                Self::PROCESSOR_RESET => "Processor Reset",
+                Self::SERIAL_ERROR => "Serial Error",
+                Self::VBLANK_FAIL => "VBlank Fail",
+                Self::XILINX_FAIL => "XILINX Fail",
+                Self::I2C_FAIL => "I2C Fail",
+                Self::EEPROM_FAIL => "EEPROM Fail",
+                Self::DSP_ACKNOWLEDGE_FAIL => "DSP Acknowledge Fail",
+                Self::DSP_ACCEPT_FAIL => "DSP Accept Fail",
+                Self::DSP_PROVIDE_FAIL => "DSP Provide Fail",
+                Self::DSP_EXCEPTION_ERROR => "DSP Exception Error",
+                Self::I2C_NOREPLY_FAIL => "I2C No Reply Fail",
+                Self::I2C_BUSERROR_FAIL => "I2C Bus Error Fail",
+                Self::I2C_ACK_FAIL => "I2C ACK Fail",
+                Self::I2C_UNDEFINED_STATE => "I2C Undefined State",
+                Self::I2C_OVERFLOW => "I2C Overflow"
+            })
+        }
+    }
+
 
     impl Default for SystemStatus {
         fn default() -> Self {
@@ -156,6 +179,11 @@ pub mod common {
 
         }
     }
+    impl Display for LEDFlags {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{:08b}", self.bits())
+        }
+    }
 
     bitflags! {
         #[derive(Copy, Clone, Default, Debug)]
@@ -168,6 +196,12 @@ pub mod common {
             const S2_RIGHT    = 0b00000000;
             const S4_CLOSED   = 0b00000000;
             const IS_S3_RIGHT = 0b10000000;
+        }
+    }
+
+    impl Display for SwitchSettingFlags {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{:08b}", self.bits())
         }
     }
 
@@ -186,6 +220,17 @@ pub mod common {
         }
     }
 
+    impl Display for DSPError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", match self {
+                Self::TOO_FEW_TARGETS => "Too Few Targets",
+                Self::ITERATION_CONVERGE_FAIL => "Iteration Converge Fail",
+                Self::DSP_RESET => "DSP Reset",
+                Self::INTERNAL_ERROR => "Internal Error"
+            } )
+        }
+    }
+
     #[derive(Copy, Clone, Debug)]
     pub enum DSPStatus {
         Error(DSPError),
@@ -199,6 +244,17 @@ pub mod common {
         VIDEO_DATA_0x55 = 0x40,
         VIDEO_DATA_0xAA = 0x80,
         VIDEO_DATA_TEST = 0xC0,
+    }
+
+    impl Display for DiagnosticModes {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", match self {
+                Self::NORMAL_OPERATION => "Normal Operation",
+                Self::VIDEO_DATA_0x55 => "Video Data 0x55",
+                Self::VIDEO_DATA_0xAA => "Video Data 0xAA",
+                Self::VIDEO_DATA_TEST => "Video Data Test"
+            })
+        }
     }
 
     impl Default for DiagnosticModes {

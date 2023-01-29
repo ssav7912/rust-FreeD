@@ -159,6 +159,39 @@ impl Display for PayloadModes {
     }
 }
 
+impl StructUI for PayloadModes {
+    fn to_array_of_strings(self) -> Vec<[String; 3]> {
+        match self {
+            PayloadModes::CameraCalibrationPayload(a) => a.to_array_of_strings(),
+            PayloadModes::PollPayload(a) => a.to_array_of_strings(),
+            PayloadModes::PositionPollPayload(a) => a.to_array_of_strings(),
+            PayloadModes::SystemStatusPayload(a) => a.to_array_of_strings(),
+            PayloadModes::SystemControlPayload(a) => a.to_array_of_strings(),
+            PayloadModes::TargetDataPayload(a) => a.to_array_of_strings(),
+            PayloadModes::ImageDataPayload(a) => a.to_array_of_strings(),
+            PayloadModes::EEPROMDataPayload(a) => a.to_array_of_strings(),
+            PayloadModes::EEPROMDataRequestPayload(a) => a.to_array_of_strings(),
+            PayloadModes::DiagnosticModePayload(a) => a.to_array_of_strings(),
+        }
+    }
+
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: tui::layout::Rect) where B: tui::backend::Backend {
+        match self {
+            PayloadModes::CameraCalibrationPayload(a) => a.draw_fields_as_table(f, area),
+            PayloadModes::PollPayload(a) => a.draw_fields_as_table(f, area),
+            PayloadModes::PositionPollPayload(a) => a.draw_fields_as_table(f, area),
+            PayloadModes::SystemStatusPayload(a) => a.draw_fields_as_table(f, area),
+            PayloadModes::SystemControlPayload(a) => a.draw_fields_as_table(f, area),
+            PayloadModes::TargetDataPayload(a) => a.draw_fields_as_table(f, area),
+            PayloadModes::ImageDataPayload(a) => a.draw_fields_as_table(f, area),
+            PayloadModes::EEPROMDataPayload(a) => a.draw_fields_as_table(f, area),
+            PayloadModes::EEPROMDataRequestPayload(a) => a.draw_fields_as_table(f, area),
+            PayloadModes::DiagnosticModePayload(a) => a.draw_fields_as_table(f, area)
+            
+        }
+    }
+}
+
 //Maximum of 100 columns!
 fn even_columns(columns: usize) -> Vec<Constraint> {
     let percent = 100/columns;
@@ -176,7 +209,7 @@ fn ui<B: tui::backend::Backend>(f: &mut Frame<B>, status: Status) {
     let outstructblock = Block::default().title("Data Out").borders(Borders::ALL);
     let innerarea = outstructblock.inner(inoutsplit[0]);
     f.render_widget(outstructblock, inoutsplit[0]);
-    let payload = PositionPollPayload::default();
+    let payload = status.payload_mode;
     payload.draw_fields_as_table(f, innerarea);
     
 
