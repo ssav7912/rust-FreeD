@@ -1,43 +1,17 @@
 mod payloadui;
 
 use std::fmt::{Display, format};
-use std::io::stdout;
 use std::net::{UdpSocket, IpAddr, Ipv4Addr, SocketAddr};
 use std::ops::Not;
-use std::slice::Iter;
-use crossterm::cursor::MoveTo;
 use crossterm::terminal::{Clear, ClearType, ScrollUp, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{self, event, execute};
 use crossterm::event::{read,Event,KeyCode, KeyEvent, MouseEvent};
-use freed::freed::{PositionPollPayload, PollPayload, SystemStatusPayload, SystemControlPayload, TargetDataPayload, ImageDataPayload, EEPROMDataPayload, EEPROMDataRequestPayload, CameraCalibrationPayload, DiagnosticModePayload};
+use freed::payloads::{PositionPollPayload, PollPayload, SystemStatusPayload, SystemControlPayload, TargetDataPayload, ImageDataPayload, EEPROMDataPayload, EEPROMDataRequestPayload, CameraCalibrationPayload, DiagnosticModePayload};
 use payloadui::StructUI;
 use tui::Frame;
 use tui::widgets::{Paragraph, Wrap};
 use tui::{backend::CrosstermBackend, widgets::{Widget, Block, Borders},layout::{Layout, Constraint, Direction}, Terminal};
 use freed;
-
-macro_rules! DisplayStruct {
-    ($struct:ident {$( $field:ident:$type:ty ),*,}) => {
-        #[derive(Debug)]
-        pub struct $struct { pub $($field: $type),*}
-
-        impl fmt::Display for $struct {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                $(
-                    write!(f, "{}: {}\n",
-                        stringify!($field).to_string(),
-                        match &self.$field {
-                            None => "-".to_string(),
-                            Some(x) => format!("{:#?}", x)
-                        }
-                    )?;
-                )*
-                Ok(())
-            }
-        }
-    };
-}
-
 
 struct CleanUp(std::io::Stdout);
 impl Drop for CleanUp {
@@ -51,6 +25,7 @@ impl Drop for CleanUp {
 struct Status {
     operating_mode: OperatingModes,
     payload_mode: PayloadModes,
+    payload_index: Option<i32>,
     payload_history: [PayloadModes; 10],
     address: IpAddr,
     port: u16,
@@ -61,16 +36,44 @@ impl Status {
         self.payload_history[self.payload_mode.get_array_index()] = self.payload_mode;
         self.payload_mode = new_mode;
     }
+    
+    pub fn increment_index(&mut self) -> Option<i32> {
+        self.new_index(match self.payload_index {Some(i) => Some(i + 1), None => Some(0)})
+    }
+
+    pub fn decrement_index(&mut self) -> Option<i32> {
+        self.new_index(match self.payload_index {Some(i) => Some(i -1), 
+            None => Some(self.payload_mode.to_array_of_strings().len() as i32)})
+    }
+
+    fn new_index(&mut self, new_index: Option<i32>) -> Option<i32> {
+        let payloadarray = self.payload_mode.to_array_of_strings();
+        let len = payloadarray.len();
+
+        let index = new_index;
+        match index {
+            Some(i) => if i as usize >= len {self.payload_index = None} 
+            else {self.payload_index = index},
+            None => self.payload_index = None
+            
+        }
+
+        self.payload_index
+    }
+
 }
 
 impl Default for Status {
     fn default() -> Self {
         let payloadhistory = PayloadModes::array();
 
-        Status {operating_mode: OperatingModes::FreezeMode, payload_mode: PayloadModes::PositionPollPayload(freed::freed::PositionPollPayload::default()),
-        payload_history: payloadhistory, address: IpAddr::V4(Ipv4Addr::LOCALHOST), port: 40000}
+        Status {operating_mode: OperatingModes::FreezeMode, payload_mode: PayloadModes::PositionPollPayload(PositionPollPayload::default()),
+        payload_index: None, payload_history: payloadhistory, address: IpAddr::V4(Ipv4Addr::LOCALHOST), port: 40000}
     }
 }
+
+
+
 
 
 #[derive(Clone, Copy)]
@@ -97,16 +100,16 @@ impl Display for OperatingModes {
 
 #[derive(Copy, Clone, Debug)]
 enum PayloadModes {
-    PollPayload(freed::freed::PollPayload),
-    PositionPollPayload(freed::freed::PositionPollPayload),
-    SystemStatusPayload(freed::freed::SystemStatusPayload),
-    SystemControlPayload(freed::freed::SystemControlPayload),
-    TargetDataPayload(freed::freed::TargetDataPayload),
-    ImageDataPayload(freed::freed::ImageDataPayload),
-    EEPROMDataPayload(freed::freed::EEPROMDataPayload),
-    EEPROMDataRequestPayload(freed::freed::EEPROMDataRequestPayload),
-    CameraCalibrationPayload(freed::freed::CameraCalibrationPayload),
-    DiagnosticModePayload(freed::freed::DiagnosticModePayload),
+    PollPayload(freed::payloads::PollPayload),
+    PositionPollPayload(freed::payloads::PositionPollPayload),
+    SystemStatusPayload(freed::payloads::SystemStatusPayload),
+    SystemControlPayload(freed::payloads::SystemControlPayload),
+    TargetDataPayload(freed::payloads::TargetDataPayload),
+    ImageDataPayload(freed::payloads::ImageDataPayload),
+    EEPROMDataPayload(freed::payloads::EEPROMDataPayload),
+    EEPROMDataRequestPayload(freed::payloads::EEPROMDataRequestPayload),
+    CameraCalibrationPayload(freed::payloads::CameraCalibrationPayload),
+    DiagnosticModePayload(freed::payloads::DiagnosticModePayload),
 }
 
 impl PayloadModes {
@@ -126,16 +129,16 @@ impl PayloadModes {
     }
     pub fn array() -> [Self; 10] {
          [
-            PayloadModes::PollPayload(freed::freed::PollPayload::default()), 
-            PayloadModes::PositionPollPayload(freed::freed::PositionPollPayload::default()),
-            PayloadModes::SystemStatusPayload(freed::freed::SystemStatusPayload::default()),
-            PayloadModes::SystemControlPayload(freed::freed::SystemControlPayload::default()),
-            PayloadModes::TargetDataPayload(freed::freed::TargetDataPayload::default()),
-            PayloadModes::ImageDataPayload(freed::freed::ImageDataPayload::default()),
-            PayloadModes::EEPROMDataPayload(freed::freed::EEPROMDataPayload::default()),
-            PayloadModes::EEPROMDataRequestPayload(freed::freed::EEPROMDataRequestPayload::default()),
-            PayloadModes::CameraCalibrationPayload(freed::freed::CameraCalibrationPayload::default()),
-            PayloadModes::DiagnosticModePayload(freed::freed::DiagnosticModePayload::default()),]
+            PayloadModes::PollPayload(PollPayload::default()), 
+            PayloadModes::PositionPollPayload(PositionPollPayload::default()),
+            PayloadModes::SystemStatusPayload(SystemStatusPayload::default()),
+            PayloadModes::SystemControlPayload(SystemControlPayload::default()),
+            PayloadModes::TargetDataPayload(TargetDataPayload::default()),
+            PayloadModes::ImageDataPayload(ImageDataPayload::default()),
+            PayloadModes::EEPROMDataPayload(EEPROMDataPayload::default()),
+            PayloadModes::EEPROMDataRequestPayload(EEPROMDataRequestPayload::default()),
+            PayloadModes::CameraCalibrationPayload(CameraCalibrationPayload::default()),
+            PayloadModes::DiagnosticModePayload(DiagnosticModePayload::default()),]
     }
 
 }
@@ -175,18 +178,18 @@ impl StructUI for PayloadModes {
         }
     }
 
-    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: tui::layout::Rect) where B: tui::backend::Backend {
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, index: Option<i32>, area: tui::layout::Rect) where B: tui::backend::Backend {
         match self {
-            PayloadModes::CameraCalibrationPayload(a) => a.draw_fields_as_table(f, area),
-            PayloadModes::PollPayload(a) => a.draw_fields_as_table(f, area),
-            PayloadModes::PositionPollPayload(a) => a.draw_fields_as_table(f, area),
-            PayloadModes::SystemStatusPayload(a) => a.draw_fields_as_table(f, area),
-            PayloadModes::SystemControlPayload(a) => a.draw_fields_as_table(f, area),
-            PayloadModes::TargetDataPayload(a) => a.draw_fields_as_table(f, area),
-            PayloadModes::ImageDataPayload(a) => a.draw_fields_as_table(f, area),
-            PayloadModes::EEPROMDataPayload(a) => a.draw_fields_as_table(f, area),
-            PayloadModes::EEPROMDataRequestPayload(a) => a.draw_fields_as_table(f, area),
-            PayloadModes::DiagnosticModePayload(a) => a.draw_fields_as_table(f, area)
+            PayloadModes::CameraCalibrationPayload(a) => a.draw_fields_as_table(f, index, area),
+            PayloadModes::PollPayload(a) => a.draw_fields_as_table(f, index, area),
+            PayloadModes::PositionPollPayload(a) => a.draw_fields_as_table(f, index, area),
+            PayloadModes::SystemStatusPayload(a) => a.draw_fields_as_table(f, index, area),
+            PayloadModes::SystemControlPayload(a) => a.draw_fields_as_table(f, index, area),
+            PayloadModes::TargetDataPayload(a) => a.draw_fields_as_table(f, index, area),
+            PayloadModes::ImageDataPayload(a) => a.draw_fields_as_table(f, index, area),
+            PayloadModes::EEPROMDataPayload(a) => a.draw_fields_as_table(f, index, area),
+            PayloadModes::EEPROMDataRequestPayload(a) => a.draw_fields_as_table(f, index, area),
+            PayloadModes::DiagnosticModePayload(a) => a.draw_fields_as_table(f, index, area)
             
         }
     }
@@ -210,7 +213,7 @@ fn ui<B: tui::backend::Backend>(f: &mut Frame<B>, status: Status) {
     let innerarea = outstructblock.inner(inoutsplit[0]);
     f.render_widget(outstructblock, inoutsplit[0]);
     let payload = status.payload_mode;
-    payload.draw_fields_as_table(f, innerarea);
+    payload.draw_fields_as_table(f, status.payload_index, innerarea);
     
 
     // let outstructtext = Paragraph::new(format!("{:?}", status.payload_mode)).block(outstructblock).wrap(Wrap {trim: true});
@@ -246,6 +249,7 @@ fn ui<B: tui::backend::Backend>(f: &mut Frame<B>, status: Status) {
 
 fn main() -> Result<(), std::io::Error> {
     let mut status = Status::default();
+    let mut inputBuffer = Vec::<char>::new();
 
     let socket = UdpSocket::bind(SocketAddr::new(status.address, status.port)).unwrap();
 
@@ -294,20 +298,41 @@ fn main() -> Result<(), std::io::Error> {
                     modifiers: event::KeyModifiers::NONE,
                     ..
                 } => {
-                    match char.to_digit(10) {
-                        Some(1) => status.change_payload_mode(status.payload_history[0]),
-                        Some(2) => status.change_payload_mode(status.payload_history[1]),
-                        Some(3) => status.change_payload_mode(status.payload_history[2]),
-                        Some(4) => status.change_payload_mode(status.payload_history[3]),
-                        Some(5) => status.change_payload_mode(status.payload_history[4]),
-                        Some(6) => status.change_payload_mode(status.payload_history[5]),
-                        Some(7) => status.change_payload_mode(status.payload_history[6]),
-                        Some(8) => status.change_payload_mode(status.payload_history[7]),
-                        Some(9) => status.change_payload_mode(status.payload_history[8]),
-                        Some(0) => status.change_payload_mode(status.payload_history[9]), 
-                        _ => continue
+                    match status.payload_index {
+                        None =>  match char.to_digit(10) {
+                            Some(1) => status.change_payload_mode(status.payload_history[0]),
+                            Some(2) => status.change_payload_mode(status.payload_history[1]),
+                            Some(3) => status.change_payload_mode(status.payload_history[2]),
+                            Some(4) => status.change_payload_mode(status.payload_history[3]),
+                            Some(5) => status.change_payload_mode(status.payload_history[4]),
+                            Some(6) => status.change_payload_mode(status.payload_history[5]),
+                            Some(7) => status.change_payload_mode(status.payload_history[6]),
+                            Some(8) => status.change_payload_mode(status.payload_history[7]),
+                            Some(9) => status.change_payload_mode(status.payload_history[8]),
+                            Some(0) => status.change_payload_mode(status.payload_history[9]), 
+                            _ => continue
+                        },
+                        Some(index) => {inputBuffer.push(char);
+                            
+                        }
+
                     }
+                   
                 }
+
+                KeyEvent {
+                    code: KeyCode::Tab,
+                    modifiers: event::KeyModifiers::NONE,
+                    ..
+                } => {
+                    status.increment_index();
+                }
+
+                KeyEvent {
+                    code: KeyCode::BackTab,
+                    ..
+                } => {status.decrement_index();}
+
 
                 _ => {}
 

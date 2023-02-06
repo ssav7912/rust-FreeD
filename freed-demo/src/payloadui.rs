@@ -1,16 +1,17 @@
 use std::{vec, fmt};
 
-use freed::freed::*;
-use tui::{backend::Backend, layout::{Rect, Layout, Direction, Constraint}, Frame, widgets::{Table, Paragraph, Block, Cell, Row, Borders}};
+use freed::payloads::*;
+use tui::{backend::Backend, layout::{Rect, Layout, Direction, Constraint}, 
+Frame, widgets::{Table, Paragraph, Block, Cell, Row, Borders}, style::{Style, Modifier, Color}};
 
 use crate::even_columns;
 pub trait StructUI {    
 
     fn to_array_of_strings(self) -> Vec<[String; 3]>;
 
-    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: Rect) where B: Backend;
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, index: Option<i32>, area: Rect) where B: Backend;
  
-    fn table_template<B>(f: &mut Frame<B>, area: Rect, title: &str, fields: Vec<[String; 3]>) where B: Backend {
+    fn table_template<B>(f: &mut Frame<B>, area: Rect, title: &str, index: Option<i32>, fields: Vec<[String; 3]>) where B: Backend {
         let innerlayout = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(10), Constraint::Percentage(90)]).split(area);
 
         let struct_title = Paragraph::new(title).block(Block::default().borders(Borders::NONE));
@@ -19,29 +20,49 @@ pub trait StructUI {
         let header_cells = ["Field", "Value", "Unit"].iter().map(|h| Cell::from(*h));
         let header = Row::new(header_cells).height(1).bottom_margin(1);
 
-        let rows = fields.iter().map(|item| {
-            let cells = item.iter().map(|c| Cell::from(c.as_ref()));
+        let rows = fields.iter().enumerate().map(|(i, item)| {
+            
+            let cells = item.iter().map
+            (|c| Cell::from(c.as_ref()).style(
+                match index {
+                    Some(index) => if index as usize == i {
+                        Style::default().fg(Color::Black)
+                        .bg(Color::White).add_modifier(Modifier::BOLD)
+                    } else {Style::default()}, //hmm
+                    None => Style::default()
+                }
+                ));
+            
             Row::new(cells).height(1)
+            
         });        
 
+        
         
         let binding = even_columns(3);
         let table = Table::new(rows).header(header).block(Block::default().borders(Borders::ALL)).
         widths(binding.as_ref());
         f.render_widget(table, innerlayout[1]);
     }
+
+
+
 }
+
 
 impl StructUI for PollPayload {
     fn to_array_of_strings(self) -> Vec<[String; 3]> {
         vec![["Command".to_string(), self.command.to_string(), "".to_string()]]
     }
 
-    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: Rect) where B: Backend {
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, index: Option<i32>, area: Rect) where B: Backend {
         let fields = self.to_array_of_strings();
 
-        Self::table_template(f, area, "Poll Payload", fields);
+        Self::table_template(f, area, "Poll Payload", index, fields);
     }
+
+
+
 }
 
 impl StructUI for PositionPollPayload {
@@ -58,10 +79,10 @@ impl StructUI for PositionPollPayload {
     }
 
 
-    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: Rect) where B: Backend {
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, index: Option<i32>, area: Rect) where B: Backend {
         let fields = self.to_array_of_strings();
 
-        Self::table_template(f, area, "Position Poll Payload", fields);
+        Self::table_template(f, area, "Position Poll Payload", index, fields);
     }
 }
 
@@ -82,10 +103,10 @@ impl StructUI for SystemStatusPayload {
         ]
     }
 
-    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: Rect) where B: Backend {
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, index: Option<i32>, area: Rect) where B: Backend {
         let fields = self.to_array_of_strings();
         
-        Self::table_template(f, area, "System Status Payload", fields);
+        Self::table_template(f, area, "System Status Payload", index, fields);
     }
 }
 
@@ -104,10 +125,10 @@ impl StructUI for SystemControlPayload {
         ["Min White Pixels".to_string(), self.minwhitepixels.to_string(), "".to_string()]
         ]
     }
-    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: Rect) where B: Backend {
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, index: Option<i32>, area: Rect) where B: Backend {
         let fields = self.to_array_of_strings();
 
-        Self::table_template(f, area, "System Control Payload", fields)
+        Self::table_template(f, area, "System Control Payload", index, fields)
     }
 }
 
@@ -123,10 +144,10 @@ impl StructUI for TargetDataPayload {
         ]
     }
 
-    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: Rect) where B: Backend {
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, index: Option<i32>, area: Rect) where B: Backend {
         let fields = self.to_array_of_strings();
 
-        Self::table_template(f, area, "Target Data Payload", fields)
+        Self::table_template(f, area, "Target Data Payload", index, fields)
     }
 }
 
@@ -142,9 +163,9 @@ impl StructUI for ImageDataPayload {
         ]
     }
 
-    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: Rect) where B: Backend {
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, index: Option<i32>, area: Rect) where B: Backend {
         let fields = self.to_array_of_strings();
-        Self::table_template(f, area, "Image Data Payload", fields)
+        Self::table_template(f, area, "Image Data Payload", index, fields)
     }
 }
 
@@ -161,10 +182,10 @@ impl StructUI for EEPROMDataPayload {
         return fields;
     }
 
-    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: Rect) where B: Backend {
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, index: Option<i32>, area: Rect) where B: Backend {
         let fields = self.to_array_of_strings();
 
-        Self::table_template(f, area, "EEPROM Data Payload", fields)
+        Self::table_template(f, area, "EEPROM Data Payload", index, fields)
     }
 }
 
@@ -174,10 +195,10 @@ impl StructUI for EEPROMDataRequestPayload {
             ["EEPROM Address".to_string(), format!("{:#06x}", self.EEPROMaddress), "".to_string()]
         ]
     }
-    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: Rect) where B: Backend {
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, index: Option<i32>, area: Rect) where B: Backend {
         let fields = self.to_array_of_strings();
 
-        Self::table_template(f, area, "EEPROM Data Request Payload", fields)
+        Self::table_template(f, area, "EEPROM Data Request Payload", index, fields)
     }
 }
 
@@ -196,10 +217,10 @@ impl StructUI for CameraCalibrationPayload {
         ]
     }
 
-    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: Rect) where B: Backend {
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, index: Option<i32>, area: Rect) where B: Backend {
         let fields = self.to_array_of_strings();
 
-        Self::table_template(f, area, "Camera Calibration Payload", fields)
+        Self::table_template(f, area, "Camera Calibration Payload", index, fields)
     }
 }
 
@@ -209,9 +230,9 @@ impl StructUI for DiagnosticModePayload {
             ["Diagnostic Flag".to_string(), self.diagnosticflag.to_string(), "".to_string()]
         ]
     }
-    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, area: Rect) where B: Backend {
+    fn draw_fields_as_table<B>(self, f: &mut Frame<B>, index: Option<i32>, area: Rect) where B: Backend {
         let fields = self.to_array_of_strings();
 
-        Self::table_template(f, area, "Diagnostic Mode Payload", fields)
+        Self::table_template(f, area, "Diagnostic Mode Payload", index, fields)
     }
 }

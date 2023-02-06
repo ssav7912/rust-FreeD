@@ -1,5 +1,5 @@
 use freed::common::*;
-use freed::freed::*;
+use freed::payloads::*;
 
 #[test]
 fn ExampleProgram() {

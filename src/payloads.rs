@@ -1,12 +1,13 @@
-
+#![allow(dead_code)]
 
 use crate::common::*;
 
-use std::fmt;
 use std::vec;
 
 use ux::i24;
 use ux::u24;
+
+
 
 #[derive(Copy, Clone, Debug)]
 ///Wrapper for a simple poll command.
@@ -74,12 +75,7 @@ fn deserialise<T: Serialise + Default + Deserialise>(data: &[u8]) -> Result<Mess
     return Ok(Message::<T> {command: command, cameraid: cameraid, payload: payload, checksum: checksum})
 }
 
-struct MessageTest {
-    command: Commands,
-    cameraid: u8,
-    payload: Payloads,
-    checksum: u8
-}
+
 enum Payloads {
     PollPayload(PollPayload),
     PositionPollPayload(PositionPollPayload),
@@ -128,6 +124,7 @@ impl Default for SystemStatusPayload {
     }
 }
 
+#[allow(non_snake_case)]
 impl Serialise for SystemStatusPayload {
     fn serialise(self) -> Vec<u8> {
         let dspstatusserial = match self.dspstatus {
@@ -231,6 +228,7 @@ impl Serialise for ImageDataPayload {
     }
 }
 
+#[allow(non_snake_case)]
 #[derive(Copy, Clone, Default, Debug)]
 pub struct EEPROMDataPayload {
     pub EEPROMaddress: u16,
@@ -247,7 +245,7 @@ impl Serialise for EEPROMDataPayload {
         return serial;
     }
 }
-
+#[allow(non_snake_case)]
 #[derive(Copy, Clone, Default, Debug)]
 pub struct EEPROMDataRequestPayload {
     pub EEPROMaddress: u16,
@@ -518,15 +516,15 @@ impl Message<ImageDataPayload> {
 fn is_valid_message<T: Serialise>(array: &[u8]) -> bool {
     let command: Result<Commands, String> = array[0].try_into();
 
-    let commandCorrect: bool = match command {
+    let command_correct: bool = match command {
         Ok(x) => x == T::COMMAND,
         Err(_) => false,
     };
 
     //when is it possible for different arrays to have the same checksum?
-    let checksumCorrect = generate_checksum(&array) == array[array.len() - 1];
+    let checksum_correct = generate_checksum(&array) == array[array.len() - 1];
 
-    return commandCorrect && checksumCorrect;
+    return command_correct && checksum_correct;
 }
 
 fn serialisei24array(array: &[ux::i24]) -> Vec<u8> {
@@ -588,6 +586,7 @@ mod test {
         assert_eq!(serial[0], payload.command as u8);
     }
 
+    #[allow(non_snake_case)]
     #[test]
     fn systemstatuspayload_serialise() {
         let switchset = SwitchSettingFlags::S5_HEX_00 | SwitchSettingFlags::IS_S3_RIGHT;
@@ -618,6 +617,7 @@ mod test {
         assert_eq!(serial[6], 3);
     }
 
+    #[allow(non_snake_case)]
     #[test]
     fn systemstatuspayload_serialise_dsperror() {
         let switchset = SwitchSettingFlags::S5_HEX_00 | SwitchSettingFlags::IS_S3_RIGHT;
@@ -823,7 +823,7 @@ mod test {
 
         let deserialised: Message<PositionPollPayload> = deserialise(&serial).unwrap();
 
-        let p: PositionPollPayload = deserialised.payload.try_into().unwrap(); 
+        let _p: PositionPollPayload = deserialised.payload.try_into().unwrap(); 
         
     }
 }
