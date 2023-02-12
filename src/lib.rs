@@ -2,7 +2,7 @@
 pub mod payloads;
 
 pub mod common {
-    use std::fmt::{self, Display};
+    use std::{fmt::{self, Display}, alloc::System};
 
 
     use bitflags::bitflags;
@@ -25,6 +25,11 @@ pub mod common {
     pub struct DeserialiseError {
         pub description: String,
     }
+    impl DeserialiseError {
+        pub fn length_template(length: usize, payload: &str) -> String {
+            return format!("Misformed data - the array must be exactly {} bytes for the payload type: {}", length, payload);
+        }
+    }
     impl fmt::Display for DeserialiseError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "{}", self.description)
@@ -44,8 +49,7 @@ pub mod common {
     pub struct Millimetre32768th(pub ux::i24);
 
     #[allow(non_camel_case_types)]
-    #[derive(Copy, Clone, PartialEq, Debug)]
-
+    #[derive(Copy, Clone, PartialEq, Debug, Eq, PartialOrd, Ord)]
     ///Command bytes that may be used to specify payloads or signal the freed unit.
     pub enum Commands {
         STREAM_MODE_STOP = 0x00,
@@ -113,7 +117,7 @@ pub mod common {
     }
 
     #[allow(non_camel_case_types)]
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     ///Set of possible status codes the freed unit may report as part of 
     /// a 'system status' payload.
     pub enum SystemStatus {
@@ -134,7 +138,6 @@ pub mod common {
         I2C_UNDEFINED_STATE = 95,
         I2C_OVERFLOW = 96,
     }
-
     impl Display for SystemStatus {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{}", match self {
@@ -157,16 +160,38 @@ pub mod common {
             })
         }
     }
-
-
     impl Default for SystemStatus {
         fn default() -> Self {
             Self::SYSTEM_NORMAL
         }
     }
+    impl TryFrom<u8> for SystemStatus {
+        type Error = String;
+        fn try_from(value: u8) -> Result<Self, Self::Error> {
+            match value {
+                x if x == Self::SYSTEM_NORMAL as u8 => Ok(Self::SYSTEM_NORMAL),
+                x if x == Self::PROCESSOR_RESET as u8 => Ok(Self::PROCESSOR_RESET),
+                x if x == Self::SERIAL_ERROR as u8 => Ok(Self::SERIAL_ERROR),
+                x if x == Self::VBLANK_FAIL as u8 => Ok(Self::VBLANK_FAIL),
+                x if x == Self::XILINX_FAIL as u8 => Ok(Self::XILINX_FAIL),
+                x if x == Self::I2C_FAIL as u8 => Ok(Self::I2C_FAIL),
+                x if x == Self::EEPROM_FAIL as u8 => Ok(Self::EEPROM_FAIL),
+                x if x == Self::DSP_ACKNOWLEDGE_FAIL as u8 => Ok(Self::DSP_ACKNOWLEDGE_FAIL),
+                x if x == Self::DSP_ACCEPT_FAIL as u8 => Ok(Self::DSP_ACCEPT_FAIL),
+                x if x == Self::DSP_PROVIDE_FAIL as u8 => Ok(Self::DSP_PROVIDE_FAIL),
+                x if x == Self::DSP_EXCEPTION_ERROR as u8 => Ok(Self::DSP_EXCEPTION_ERROR),
+                x if x == Self::I2C_NOREPLY_FAIL as u8 => Ok(Self::I2C_NOREPLY_FAIL),
+                x if x == Self::I2C_BUSERROR_FAIL as u8 => Ok(Self::I2C_BUSERROR_FAIL),
+                x if x == Self::I2C_ACK_FAIL as u8 => Ok(Self::I2C_ACK_FAIL),
+                x if x == Self::I2C_UNDEFINED_STATE as u8 => Ok(Self::I2C_UNDEFINED_STATE),
+                x if x == Self::I2C_OVERFLOW as u8 => Ok(Self::I2C_OVERFLOW),
+                _ => Err("Misformed System Status, no possible conversion".to_string())
+            }
+        }
+    }
 
     bitflags! {
-        #[derive(Copy, Clone, Default, Debug)]
+        #[derive(Copy, Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
         ///bitfield of possible flags that may be set for the freed LED indicator.
         pub struct LEDFlags: u8 {
             const VIDEO_PRESENT   = 0b00000001;
@@ -185,9 +210,18 @@ pub mod common {
             write!(f, "{:08b}", self.bits())
         }
     }
+    impl TryFrom<u8> for LEDFlags {
+        type Error = String;
+        fn try_from(value: u8) -> Result<Self, Self::Error> {
+            match Self::from_bits(value) {
+                Some(x) => Ok(x),
+                None => Err("Misformed LEDFlags, no possible conversion".to_string())
+            }
+        }
+    }
 
     bitflags! {
-        #[derive(Copy, Clone, Default, Debug)]
+        #[derive(Copy, Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
         pub struct SwitchSettingFlags: u8 {
             const S5_HEX_00   = 0b00000001;
             const S5_HEX_01   = 0b00000010;
@@ -206,8 +240,24 @@ pub mod common {
         }
     }
 
+    impl TryFrom<u8> for SwitchSettingFlags {
+        fn try_from(value: u8) -> Result<Self, Self::Error> {
+
+            match Self::from_bits(value) {
+                Some(x) => Ok(x),
+                None => Err("Misformed SwitchSettingFlag, no possible conversion".to_string())
+            }
+        }
+
+        type Error = String;
+            
+        
+        }
+    
+
+
     #[allow(non_camel_case_types)]
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     pub enum DSPError {
         TOO_FEW_TARGETS = -1,
         ITERATION_CONVERGE_FAIL = -2,
@@ -232,6 +282,19 @@ pub mod common {
         }
     }
 
+    impl TryFrom<i8> for DSPError {
+        type Error = String;
+        fn try_from(value: i8) -> Result<Self, Self::Error> {
+            match value {
+                x if x == Self::TOO_FEW_TARGETS as i8 => Ok(Self::TOO_FEW_TARGETS),
+                x if x == Self::ITERATION_CONVERGE_FAIL as i8 => Ok(Self::ITERATION_CONVERGE_FAIL),
+                x if x == Self::DSP_RESET as i8 => Ok(Self::DSP_RESET),
+                x if x == Self::INTERNAL_ERROR as i8 => Ok(Self::INTERNAL_ERROR),
+                _ => Err("Misformed DSPError, no possible conversion".to_string())
+            }
+        }
+    }
+
     #[derive(Copy, Clone, Debug)]
     pub enum DSPStatus {
         Error(DSPError),
@@ -239,7 +302,7 @@ pub mod common {
     }
 
     #[allow(non_camel_case_types)]
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     pub enum DiagnosticModes {
         NORMAL_OPERATION = 0x00,
         VIDEO_DATA_0x55 = 0x40,
@@ -261,6 +324,19 @@ pub mod common {
     impl Default for DiagnosticModes {
         fn default() -> Self {
             Self::NORMAL_OPERATION
+        }
+    }
+
+    impl TryFrom<u8> for DiagnosticModes {
+        type Error = String;
+        fn try_from(value: u8) -> Result<Self, Self::Error> {
+            match value {
+                x if x == Self::NORMAL_OPERATION as u8 => Ok(Self::NORMAL_OPERATION),
+                x if x == Self::VIDEO_DATA_0x55 as u8 => Ok(Self::VIDEO_DATA_0x55),
+                x if x == Self::VIDEO_DATA_0xAA as u8 => Ok(Self::VIDEO_DATA_0xAA),
+                x if x == Self::VIDEO_DATA_TEST as u8 => Ok(Self::VIDEO_DATA_TEST),
+                _ => Err("Misformed DiagnosticMode value, no possible conversion".to_string())
+            }
         }
     }
 }

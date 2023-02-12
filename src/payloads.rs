@@ -2,6 +2,7 @@
 
 use crate::common::*;
 
+use std::alloc::System;
 use std::vec;
 
 use ux::i24;
@@ -9,8 +10,34 @@ use ux::u24;
 
 
 
-#[derive(Copy, Clone, Debug)]
-///Wrapper for a simple poll command.
+///Convenience enum for all the payload types. 
+enum Payloads {
+    PollPayload(PollPayload),
+    PositionPollPayload(PositionPollPayload),
+    SystemStatusPayload(SystemStatusPayload),
+    SystemControlPayload(SystemControlPayload),
+    TargetDataPayload(TargetDataPayload),
+    ImageDataPayload(ImageDataPayload),
+    EEPROMDataPayload(EEPROMDataPayload),
+    EEPROMDataRequestPayload(EEPROMDataRequestPayload),
+    CameraCalibrationPayload(CameraCalibrationPayload),
+    DiagnosticModePayload(DiagnosticModePayload),
+}
+
+
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+///Struct for a simple poll command, corresponding to free-d command `0xD1`
+/// 
+///This is used by the free-d protocol to send poll commands to a free-d unit, which
+/// should return back a payload message corresponding to the desired command.
+/// 
+/// ```rust
+/// let payload: PollPayload = PollPayload {command: Commands::POSITION_POLL}
+/// 
+/// //serialise the data to send it
+/// let data = payload.serialise();
+/// ```
 pub struct PollPayload {
     pub command: Commands,
 }
@@ -43,55 +70,31 @@ impl Deserialise for PollPayload {
     }
 }
 
-fn deserialise<T: Serialise + Default + Deserialise>(data: &[u8]) -> Result<Message<T>, DeserialiseError> {
-    if data.len() < 4 {
-        return Err(DeserialiseError {
-            description: "Misformed data - the protocol defines no messages smaller than 4 bytes"
-                .to_string(),
-        });
-    }
-
-    let checksum = data[data.len()-1];
-
-    if generate_checksum(&data) != checksum {
-        return Err(DeserialiseError {
-            description: "Misformed data - checksum is incorrect.".to_string(),
-        });
-    }
-    let cameraid = data[1];
-    let command: Commands = match data[0].try_into() {
-        Ok(x) => x,
-        Err(x) => return Err(DeserialiseError { description: x }),
-    };
-
-    let payload: T = T::deserialise(&data[3..data.len()-1]).unwrap();
-
-    // let payload = match command {
-    //     Commands::POSITION_POLL => Payloads::PositionPollPayload(PositionPollPayload::deserialise(
-    //         &data[3..data.len() - 1],
-    //     )?),
-    //     _ => todo!(),
-    // };
-    return Ok(Message::<T> {command: command, cameraid: cameraid, payload: payload, checksum: checksum})
-}
 
 
-enum Payloads {
-    PollPayload(PollPayload),
-    PositionPollPayload(PositionPollPayload),
-    SystemStatusPayload(SystemStatusPayload),
-    SystemControlPayload(SystemControlPayload),
-    TargetDataPayload(TargetDataPayload),
-    ImageDataPayload(ImageDataPayload),
-    EEPROMDataPayload(EEPROMDataPayload),
-    EEPROMDataRequestPayload(EEPROMDataRequestPayload),
-    CameraCalibrationPayload(CameraCalibrationPayload),
-    DiagnosticModePayload(DiagnosticModePayload),
-}
-
-
-
-#[derive(Copy, Clone, Debug)]
+///System Status Payload. Typically reported by the free-d unit in response to a
+/// `0xD2` `SYSTEM_STATUS` poll. 
+/// 
+/// `switchsetting` - see `SwitchSettingFlags`. Describes the status of the free-d switch
+/// 
+/// `ledindication` - see `LEDFlags`. Reports the status of the LED indicators on the free-d unit
+/// 
+/// `systemstatus` - see `SystemStatus`. Reports the internal state of the free-d unit.
+/// 
+/// `cpufirmwareversion`, `pldfirmwareversion`, `dspsoftwareversion`. Firmware version values of various hardware components of the
+/// free-d unit in Binary Coded Decimal, where there is an implied decimal point between the two digits. e.g. `0x12 = 1.2`. 
+/// 
+/// `dspstatus` - Reports either the number of iterations required to compute the camera's position, or an error as defined in `DSPError`
+/// 
+/// `numtargetsseen` - The number of targets detected by the hardware.
+/// 
+/// `numtargetsidentified` - The number of targets identified (bar codes read)
+/// 
+/// `numtargetsused` - The number of targets used (identified and in database)
+/// 
+/// `rmserror` - RMS error expressed in pixels, where 1 unit = 1/32768 pixels. Bits 22 to 15 decide the integer part of the value,
+/// while bits 14 to 0 decide the fractional part of the value. 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SystemStatusPayload {
     pub switchsetting: SwitchSettingFlags,
     pub ledindication: LEDFlags,
@@ -153,7 +156,62 @@ impl Serialise for SystemStatusPayload {
     }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+impl Deserialise for SystemStatusPayload {
+    fn deserialise(array: &[u8]) -> Result<Self, DeserialiseError> where Self: Sized {
+        const SIZE: usize = 16 -3;
+        const PAYLOADID: &str = "SystemStatusPayload";
+        if array.len() != SIZE {
+            return Err(DeserialiseError {description: format!("Misformed data - the array must be exactly {} bytes for the payload type: {}",
+            SIZE, PAYLOADID)})
+        }
+
+        let switchsetting: SwitchSettingFlags = match array[0].try_into() {
+            Ok(x) => x,
+            Err(x) => return Err(DeserialiseError { description: x })
+        };
+
+        let ledindication: LEDFlags = match array[1].try_into() {
+            Ok(x) => x,
+            Err(x) => return Err(DeserialiseError { description: x })
+        };
+
+        let systemstatus: SystemStatus = match array[2].try_into() {
+            Ok(x) => x,
+            Err(x) => return Err(DeserialiseError { description: x })
+        };
+        let dspcode = array[6] as i8;
+        
+        let dspstatus: Result<i8, DSPError> = match dspcode {
+            x if x >= 0 => Ok(x), 
+            x if x < 0 => Err(match x.try_into() 
+            {
+                Ok(x) => x, 
+                Err(x) => return Err(DeserialiseError { description: x })}),
+            _ => unreachable!()};
+
+            
+         Ok(SystemStatusPayload {
+            switchsetting: switchsetting,
+            ledindication: ledindication,
+            systemstatus: systemstatus,
+            cpufirmwareversion: array[3],
+            pldfirmwareversion: array[4],
+            dspsoftwareversion: array[5],
+            dspstatus: dspstatus,
+            numtargetsseen: array[7],
+            numtargetsidentified: array[8],
+            numtargetsused: array[9], 
+            rmserror: u24::new(u32::from_be_bytes(array[10..].try_into().expect("Last three bytes")))
+        })
+
+        
+        
+     }
+}
+
+///Struct used to transfer control parameters either to or from the free-d unit. A `0xD3` `SYSTEM_PARAMS` poll payload message will
+/// request this from the free-d unit. 
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
 pub struct SystemControlPayload {
     pub studioid: u8,
     pub smoothing: u8,
@@ -185,6 +243,28 @@ impl Serialise for SystemControlPayload {
     }
 }
 
+impl Deserialise for SystemControlPayload {
+    fn deserialise(array: &[u8]) -> Result<Self, DeserialiseError> where Self: Sized {
+        const SIZE: usize = 13 -3;
+        const PAYLOADID: &str = "SystemControlPayload";
+        if array.len() != SIZE {
+            return Err(DeserialiseError { description: DeserialiseError::length_template(SIZE, PAYLOADID) });
+        }
+
+        Ok(SystemControlPayload { 
+            studioid: array[0], 
+            smoothing: array[1], 
+            maxasymmetry: array[2], 
+            halfboxwidth: array[3], 
+            blackvidthreshold: array[4], 
+            whitevidthreshold: array[5], 
+            blackvidclip: array[6], 
+            whitevidclip: array[7], 
+            maxblackpixels: array[8], 
+            minwhitepixels: array[9] })
+    }
+}
+
 #[derive(Copy, Clone, Default, Debug)]
 pub struct TargetDataPayload {
     pub studioid: u8,
@@ -204,6 +284,24 @@ impl Serialise for TargetDataPayload {
         serial.extend(serialisei24array(&targetarray));
 
         return serial;
+    }
+}
+
+impl Deserialise for TargetDataPayload {
+    fn deserialise(array: &[u8]) -> Result<Self, DeserialiseError> where Self: Sized {
+        const SIZE: usize = 18-3;
+        const PAYLOADID: &str = "TargetDataPayload";
+        if array.len() != SIZE {
+            return Err(DeserialiseError { description: DeserialiseError::length_template(SIZE, PAYLOADID) })
+        }
+
+        Ok(TargetDataPayload { 
+            studioid: array[0] as u8, 
+            targetnumber: u16::from_be_bytes(array[1..3].try_into().unwrap()), 
+            targetx: i24::new(i32::from_be_bytes(array[3..6].try_into().unwrap())), 
+            targety: i24::new(i32::from_be_bytes(array[6..9].try_into().unwrap())), 
+            targetz: i24::new(i32::from_be_bytes(array[9..12].try_into().unwrap())), 
+            targetflags: i24::new(i32::from_be_bytes(array[12..15].try_into().unwrap())) })
     }
 }
 
@@ -228,6 +326,24 @@ impl Serialise for ImageDataPayload {
     }
 }
 
+impl Deserialise for ImageDataPayload {
+    fn deserialise(array: &[u8]) -> Result<Self, DeserialiseError> where Self: Sized {
+        const SIZE: usize = 18 - 3;
+        const PAYLOADID: &str = "ImageDataPayload";
+        if array.len() != SIZE { 
+            return Err(DeserialiseError { description: DeserialiseError::length_template(SIZE, PAYLOADID) })
+        }
+
+        Ok(ImageDataPayload { 
+            targetindex: array[0], 
+            targetnum: u16::from_be_bytes(array[1..2].try_into().unwrap()), 
+            targetx: i24::new(i32::from_be_bytes(array[2..5].try_into().unwrap())), 
+            targety: i24::new(i32::from_be_bytes(array[5..8].try_into().unwrap())),
+             xerror: i24::new(i32::from_be_bytes(array[8..11].try_into().unwrap())), 
+             yerror: i24::new(i32::from_be_bytes(array[11..15].try_into().unwrap())) })
+    }
+}
+
 #[allow(non_snake_case)]
 #[derive(Copy, Clone, Default, Debug)]
 pub struct EEPROMDataPayload {
@@ -245,6 +361,22 @@ impl Serialise for EEPROMDataPayload {
         return serial;
     }
 }
+
+impl Deserialise for EEPROMDataPayload {
+    fn deserialise(array: &[u8]) -> Result<Self, DeserialiseError> where Self: Sized {
+        const SIZE: usize = 21 - 3;
+        const PAYLOADID: &str = "EEPROMDataPayload";
+
+        if array.len() != SIZE {
+            return Err(DeserialiseError { description: DeserialiseError::length_template(SIZE, PAYLOADID) })
+        }
+
+        Ok(EEPROMDataPayload { 
+            EEPROMaddress: u16::from_be_bytes(array[0..2].try_into().unwrap()), 
+            EEPROMdata: array[2..].try_into().unwrap()})
+    }
+}
+
 #[allow(non_snake_case)]
 #[derive(Copy, Clone, Default, Debug)]
 pub struct EEPROMDataRequestPayload {
@@ -256,6 +388,19 @@ impl Serialise for EEPROMDataRequestPayload {
     fn serialise(self) -> Vec<u8> {
         let bytes = self.EEPROMaddress.to_be_bytes();
         return bytes.to_vec();
+    }
+}
+
+impl Deserialise for EEPROMDataRequestPayload {
+    fn deserialise(array: &[u8]) -> Result<Self, DeserialiseError> where Self: Sized {
+        const SIZE: usize = 5 - 3;
+        const PAYLOADID: &str = "EEPROMDataRequestPayload";
+
+        if array.len() != SIZE {
+            return Err(DeserialiseError { description: DeserialiseError::length_template(SIZE, PAYLOADID) })
+        }
+
+        Ok(EEPROMDataRequestPayload { EEPROMaddress: u16::from_be_bytes(array.try_into().unwrap()) })
     }
 }
 
@@ -291,6 +436,28 @@ impl Serialise for CameraCalibrationPayload {
     }
 }
 
+impl Deserialise for CameraCalibrationPayload {
+    fn deserialise(array: &[u8]) -> Result<Self, DeserialiseError> where Self: Sized {
+        const SIZE: usize = 30 - 3;
+        const PAYLOADID: &str = "CameraCalibrationPayload";
+
+        if array.len() != SIZE {
+            return Err(DeserialiseError { description: DeserialiseError::length_template(SIZE, PAYLOADID) })
+        }
+
+        Ok(CameraCalibrationPayload { 
+            lenscentrex: i24::new(i32::from_be_bytes(array[0..3].try_into().unwrap())), 
+            lenscentrey: i24::new(i32::from_be_bytes(array[3*1..3*2].try_into().unwrap())), 
+            lensscalex: i24::new(i32::from_be_bytes(array[3*2..3*3].try_into().unwrap())), 
+            lensscaley: i24::new(i32::from_be_bytes(array[3*3..3*4].try_into().unwrap())), 
+            lensdistortiona: i24::new(i32::from_be_bytes(array[3*4..3*5].try_into().unwrap())), 
+            lensdistortionb: i24::new(i32::from_be_bytes(array[3*5..3*6].try_into().unwrap())), 
+            xoffset: i24::new(i32::from_be_bytes(array[3*6..3*7].try_into().unwrap())), 
+            yoffset: i24::new(i32::from_be_bytes(array[3*7..3*8].try_into().unwrap())), 
+            zoffset: i24::new(i32::from_be_bytes(array[3*8..3*9].try_into().unwrap())) })
+    }
+}
+
 #[derive(Copy, Clone, Default, Debug)]
 pub struct DiagnosticModePayload {
     pub diagnosticflag: DiagnosticModes,
@@ -303,9 +470,25 @@ impl Serialise for DiagnosticModePayload {
     }
 }
 
+impl Deserialise for DiagnosticModePayload {
+    fn deserialise(array: &[u8]) -> Result<Self, DeserialiseError> where Self: Sized {
+        const SIZE: usize = 4 - 3;
+        const PAYLOADID: &str = "DiagnosticModePayload";
+
+        if array.len() != SIZE {
+            return Err(DeserialiseError { description: DeserialiseError::length_template(SIZE, PAYLOADID) })
+        }
+
+        Ok(DiagnosticModePayload { diagnosticflag: match array[0].try_into() {
+            Ok(x) => x, 
+            Err(x) => return Err(DeserialiseError{description: x})} })
+
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 #[cfg_attr(test, derive(PartialEq))]
-///Plain-Old-Data struct that contains payload information for a POSITION_POLL request.
+///Struct containing camera location information for a `0xD1` `POSITION_POLL` request. 
 /// Note that most fields are 24 bit (as required by the protocol spec) - this will panic if you
 /// attempt to place too large or small values into it. Use the `u24::new()` (or `i24::new()`) function to generate values
 /// from literals or primitive integer types.
@@ -428,6 +611,39 @@ impl TryFrom<Payloads> for PositionPollPayload {
     }
 }
 
+fn deserialise<T: Serialise + Default + Deserialise>(data: &[u8]) -> Result<Message<T>, DeserialiseError> {
+    if data.len() < 4 {
+        return Err(DeserialiseError {
+            description: "Misformed data - the protocol defines no messages smaller than 4 bytes"
+                .to_string(),
+        });
+    }
+
+    let checksum = data[data.len()-1];
+
+    if generate_checksum(&data) != checksum {
+        return Err(DeserialiseError {
+            description: "Misformed data - checksum is incorrect.".to_string(),
+        });
+    }
+    let cameraid = data[1];
+    let command: Commands = match data[0].try_into() {
+        Ok(x) => x,
+        Err(x) => return Err(DeserialiseError { description: x }),
+    };
+
+    let payload: T = T::deserialise(&data[3..data.len()-1]).unwrap();
+
+    // let payload = match command {
+    //     Commands::POSITION_POLL => Payloads::PositionPollPayload(PositionPollPayload::deserialise(
+    //         &data[3..data.len() - 1],
+    //     )?),
+    //     _ => todo!(),
+    // };
+    return Ok(Message::<T> {command: command, cameraid: cameraid, payload: payload, checksum: checksum})
+}
+
+
 ///Message type for serialising and deserialising protocol messages. 
 /// Once you have selected and filled out a payload struct, it can be wrapped
 /// into a message with `Message::new()`. This will instantiate a message with
@@ -540,6 +756,8 @@ fn serialisei24array(array: &[ux::i24]) -> Vec<u8> {
 
 #[cfg(test)]
 mod test {
+    use std::task::Poll;
+
     use super::*;
 
     #[test]
@@ -586,6 +804,24 @@ mod test {
         assert_eq!(serial[0], payload.command as u8);
     }
 
+    #[test]
+    fn pollpayload_deserialise() {
+        let payload = PollPayload {
+            command: Commands::EEPROM_DATA,
+        };
+
+        let serial = payload.serialise();
+
+        if let Ok(deserialisedpayload) = PollPayload::deserialise(&serial) {
+            assert_eq!(payload, deserialisedpayload);
+            
+        }
+        else {
+            //failed to deserialise
+            assert!(false);
+        }
+    }
+
     #[allow(non_snake_case)]
     #[test]
     fn systemstatuspayload_serialise() {
@@ -617,6 +853,8 @@ mod test {
         assert_eq!(serial[6], 3);
     }
 
+
+
     #[allow(non_snake_case)]
     #[test]
     fn systemstatuspayload_serialise_dsperror() {
@@ -643,6 +881,35 @@ mod test {
     }
 
     #[test]
+    fn systemstatuspayload_deserialise() {
+        let switchset = SwitchSettingFlags::S5_HEX_00 | SwitchSettingFlags::IS_S3_RIGHT;
+        let LEDindicate = LEDFlags::VIDEO_PRESENT | LEDFlags::VIDEO_OK | LEDFlags::SERIAL_PRESENT;
+
+        let payload = SystemStatusPayload {
+            switchsetting: switchset,
+            ledindication: LEDindicate,
+            systemstatus: SystemStatus::SYSTEM_NORMAL,
+            cpufirmwareversion: 1,
+            pldfirmwareversion: 1,
+            dspsoftwareversion: 1,
+            dspstatus: Ok(3),
+            numtargetsseen: 8,
+            numtargetsidentified: 8,
+            numtargetsused: 4,
+            rmserror: u24::new(0),
+        };
+
+        let serial = payload.serialise();
+
+        if let Ok(deserialised) = SystemStatusPayload::deserialise(&serial) {
+            assert_eq!(deserialised, payload);
+        }
+        else {
+            assert!(false);
+        }
+    }
+
+    #[test]
     fn systemcontrolpayload_serialise() {
         let payload = SystemControlPayload {
             studioid: 25,
@@ -664,6 +931,30 @@ mod test {
     }
 
     #[test]
+    fn systemcontrolpayload_deserialise() {
+        let payload = SystemControlPayload {
+            studioid: 25,
+            smoothing: 13,
+            maxasymmetry: 45,
+            halfboxwidth: 8,
+            blackvidthreshold: 1,
+            whitevidthreshold: 55,
+            blackvidclip: 255,
+            whitevidclip: 23,
+            maxblackpixels: 0,
+            minwhitepixels: 0,
+        };
+
+        let serial = payload.serialise();
+        if let Ok(deserialised) = SystemControlPayload::deserialise(&serial) {
+            assert_eq!(deserialised, payload);
+        }
+        else {
+            assert!(false);
+        }
+    }
+
+    #[test]
     fn targetdatapayload_serialise() {
         let testflags = 60606;
 
@@ -681,6 +972,81 @@ mod test {
         assert_eq!(serial.len(), 15);
 
         // assert_eq!(i32::from_be_bytes(&serial[serial.len()-3..serial.len()-1]), testflags);
+    }
+
+    #[test]
+    fn imagedatapayload_serialise() {
+        let payload = ImageDataPayload {
+            targetindex: 250,
+            targetnum: 30505,
+            targetx: i24::new(-44545),
+            targety: i24::new(-4114444),
+            xerror: i24::new(-43422),
+            yerror: i24::new(344),
+        };
+        let serial = payload.serialise();
+
+        assert_eq!(serial.len(), 18 - 3);
+    }
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn EEPROMdatapayload_serialise() {
+        let payload = EEPROMDataPayload {
+            EEPROMaddress: 0xFFAA,
+            EEPROMdata: [0x00, 0x00, 0xFF, 0xA1, 0xFF, 0x12, 0x00, 0x44, 0x00, 0x00, 0x11, 0x44, 0xCA, 0x55, 0xAB, 0x43],
+        };
+
+        let serial = payload.serialise();
+
+        assert_eq!(serial.len(), 18);
+
+    }
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn EEPROMDataRequestPayload_serialise() {
+        let payload = EEPROMDataRequestPayload {
+            EEPROMaddress: 0xAAFF
+        };
+
+        let serial = payload.serialise();
+        assert_eq!(serial.len(), 5 - 3);
+
+    }  
+
+    #[test]
+    fn cameracalibrationpayload_serialise() {
+        let payload = CameraCalibrationPayload {
+            lenscentrex: i24::new(444),
+            lenscentrey: i24::new(44433),
+            lensscalex: i24::new(12),
+            lensscaley: i24::new(-33),
+            lensdistortiona: i24::new(1010),
+            lensdistortionb: i24::new(-3000),
+            xoffset: i24::new(101010),
+            yoffset: i24::new(-440),
+            zoffset: i24::new(100000),
+        };
+
+        let serial = payload.serialise();
+
+        assert_eq!(serial.len(), 30-3);
+    }
+
+    #[test]
+    fn diagnosticmodepayload_serialise() {
+        let payload = DiagnosticModePayload {
+            diagnosticflag: DiagnosticModes::NORMAL_OPERATION
+        };
+
+        let serial = payload.serialise();
+
+        assert_eq!(serial.len(), 4 - 3);
+        
+        let flag:DiagnosticModes = serial[0].try_into().expect("Serialised diagnostic flag is valid");
+
+        assert_eq!(flag, DiagnosticModes::NORMAL_OPERATION);
     }
 
     /*
