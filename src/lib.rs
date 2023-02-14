@@ -21,6 +21,10 @@ pub mod common {
         fn deserialise(array: &[u8]) -> Result<Self, DeserialiseError> where Self: Sized;
     }
 
+    pub trait FromBytes<const A: usize> {
+        fn from_be_bytes(arr: [u8; A]) -> Self;
+    }
+
     #[derive(Debug, Clone)]
     pub struct DeserialiseError {
         pub description: String,
@@ -47,6 +51,31 @@ pub mod common {
     #[derive(Copy, Clone, Debug)]
     #[cfg_attr(test, derive(PartialEq))]
     pub struct Millimetre32768th(pub ux::i24);
+
+    impl FromBytes<3> for ux::u24 {
+        fn from_be_bytes(arr: [u8; 3]) -> Self {
+            ux::u24::new(((arr[2] as u32) | (arr[1] as u32) << 8 | (arr[0] as u32) << 8*2).into())
+        }
+    }
+
+    impl FromBytes<3> for ux::i24 {
+        fn from_be_bytes(arr: [u8; 3]) -> Self {
+            match (arr[0] & 0b10000000) != 0 {
+                //need to sign extend
+                true => ux::i24::new((0xff000000_u32 | (arr[2] as u32) | (arr[1] as u32) << 8 | (arr[0] as u32) << 8 * 2) as i32),
+                false => ux::i24::new(((arr[2] as u32) | (arr[1] as u32) << 8 | (arr[0] as u32) << 8 * 2).try_into().expect("Valid"))
+            }
+
+        }
+    }
+
+    pub fn extend_array<const A: usize, const B: usize>(arr: [u8; A]) -> [u8; B] {
+        assert!(B >= A);
+
+        let mut b = [0; B];
+        b[..A].copy_from_slice(&arr);
+        b
+    }
 
     #[allow(non_camel_case_types)]
     #[derive(Copy, Clone, PartialEq, Debug, Eq, PartialOrd, Ord)]

@@ -201,7 +201,7 @@ impl Deserialise for SystemStatusPayload {
             numtargetsseen: array[7],
             numtargetsidentified: array[8],
             numtargetsused: array[9], 
-            rmserror: u24::new(u32::from_be_bytes(array[10..].try_into().expect("Last three bytes")))
+            rmserror: u24::from_be_bytes(array[10..].try_into().expect("Three Bytes"))
         })
 
         
@@ -265,7 +265,7 @@ impl Deserialise for SystemControlPayload {
     }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
 pub struct TargetDataPayload {
     pub studioid: u8,
     pub targetnumber: u16,
@@ -298,14 +298,14 @@ impl Deserialise for TargetDataPayload {
         Ok(TargetDataPayload { 
             studioid: array[0] as u8, 
             targetnumber: u16::from_be_bytes(array[1..3].try_into().unwrap()), 
-            targetx: i24::new(i32::from_be_bytes(array[3..6].try_into().unwrap())), 
-            targety: i24::new(i32::from_be_bytes(array[6..9].try_into().unwrap())), 
-            targetz: i24::new(i32::from_be_bytes(array[9..12].try_into().unwrap())), 
-            targetflags: i24::new(i32::from_be_bytes(array[12..15].try_into().unwrap())) })
+            targetx: i24::from_be_bytes(array[3..6].try_into().unwrap()), 
+            targety: i24::from_be_bytes(array[6..9].try_into().unwrap()), 
+            targetz: i24::from_be_bytes(array[9..12].try_into().unwrap()), 
+            targetflags: i24::from_be_bytes(array[12..15].try_into().unwrap()) })
     }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
 pub struct ImageDataPayload {
     pub targetindex: u8,
     pub targetnum: u16,
@@ -336,16 +336,16 @@ impl Deserialise for ImageDataPayload {
 
         Ok(ImageDataPayload { 
             targetindex: array[0], 
-            targetnum: u16::from_be_bytes(array[1..2].try_into().unwrap()), 
-            targetx: i24::new(i32::from_be_bytes(array[2..5].try_into().unwrap())), 
-            targety: i24::new(i32::from_be_bytes(array[5..8].try_into().unwrap())),
-             xerror: i24::new(i32::from_be_bytes(array[8..11].try_into().unwrap())), 
-             yerror: i24::new(i32::from_be_bytes(array[11..15].try_into().unwrap())) })
+            targetnum: u16::from_be_bytes(array[1..3].try_into().unwrap()), 
+            targetx: i24::from_be_bytes(array[3..6].try_into().unwrap()), 
+            targety: i24::from_be_bytes(array[6..9].try_into().unwrap()),
+             xerror: i24::from_be_bytes(array[9..12].try_into().unwrap()), 
+             yerror: i24::from_be_bytes(array[12..15].try_into().unwrap()) })
     }
 }
 
 #[allow(non_snake_case)]
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
 pub struct EEPROMDataPayload {
     pub EEPROMaddress: u16,
     pub EEPROMdata: [u8; 16],
@@ -378,7 +378,7 @@ impl Deserialise for EEPROMDataPayload {
 }
 
 #[allow(non_snake_case)]
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
 pub struct EEPROMDataRequestPayload {
     pub EEPROMaddress: u16,
 }
@@ -404,7 +404,7 @@ impl Deserialise for EEPROMDataRequestPayload {
     }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
 pub struct CameraCalibrationPayload {
     pub lenscentrex: i24,
     pub lenscentrey: i24,
@@ -446,19 +446,19 @@ impl Deserialise for CameraCalibrationPayload {
         }
 
         Ok(CameraCalibrationPayload { 
-            lenscentrex: i24::new(i32::from_be_bytes(array[0..3].try_into().unwrap())), 
-            lenscentrey: i24::new(i32::from_be_bytes(array[3*1..3*2].try_into().unwrap())), 
-            lensscalex: i24::new(i32::from_be_bytes(array[3*2..3*3].try_into().unwrap())), 
-            lensscaley: i24::new(i32::from_be_bytes(array[3*3..3*4].try_into().unwrap())), 
-            lensdistortiona: i24::new(i32::from_be_bytes(array[3*4..3*5].try_into().unwrap())), 
-            lensdistortionb: i24::new(i32::from_be_bytes(array[3*5..3*6].try_into().unwrap())), 
-            xoffset: i24::new(i32::from_be_bytes(array[3*6..3*7].try_into().unwrap())), 
-            yoffset: i24::new(i32::from_be_bytes(array[3*7..3*8].try_into().unwrap())), 
-            zoffset: i24::new(i32::from_be_bytes(array[3*8..3*9].try_into().unwrap())) })
+            lenscentrex: i24::from_be_bytes(array[0..3].try_into().unwrap()), 
+            lenscentrey: i24::from_be_bytes(array[3*1..3*2].try_into().unwrap()), 
+            lensscalex: i24::from_be_bytes(array[3*2..3*3].try_into().unwrap()), 
+            lensscaley: i24::from_be_bytes(array[3*3..3*4].try_into().unwrap()), 
+            lensdistortiona: i24::from_be_bytes(array[3*4..3*5].try_into().unwrap()), 
+            lensdistortionb: i24::from_be_bytes(array[3*5..3*6].try_into().unwrap()), 
+            xoffset: i24::from_be_bytes(array[3*6..3*7].try_into().unwrap()), 
+            yoffset: i24::from_be_bytes(array[3*7..3*8].try_into().unwrap()), 
+            zoffset: i24::from_be_bytes(array[3*8..3*9].try_into().unwrap()) })
     }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
 pub struct DiagnosticModePayload {
     pub diagnosticflag: DiagnosticModes,
 }
@@ -585,14 +585,14 @@ impl Deserialise for PositionPollPayload {
         };
 
         let payload = PositionPollPayload {
-            pitch: i24::new(i32::from_be_bytes(array[..3].try_into().unwrap())), //can we assume this will never panic as we've verified the array size?
-            yaw: i24::new(i32::from_be_bytes(array[3..3 * 2].try_into().unwrap())),
-            roll: i24::new(i32::from_be_bytes(array[3 * 2..3 * 3].try_into().unwrap())),
-            pos_z: i24::new(i32::from_be_bytes(array[3 * 3..3 * 4].try_into().unwrap())),
-            pos_y: i24::new(i32::from_be_bytes(array[3 * 4..3 * 5].try_into().unwrap())),
-            pos_x: i24::new(i32::from_be_bytes(array[3 * 5..3 * 6].try_into().unwrap())),
-            zoom: u24::new(u32::from_be_bytes(array[3 * 6..3 * 7].try_into().unwrap())),
-            focus: u24::new(u32::from_be_bytes(array[3 * 7..3 * 8].try_into().unwrap())),
+            pitch: i24::from_be_bytes(array[..3].try_into().unwrap()), //can we assume this will never panic as we've verified the array size?
+            yaw: i24::from_be_bytes(array[3..3 * 2].try_into().unwrap()),
+            roll: i24::from_be_bytes(array[3 * 2..3 * 3].try_into().unwrap()),
+            pos_z: i24::from_be_bytes(array[3 * 3..3 * 4].try_into().unwrap()),
+            pos_y: i24::from_be_bytes(array[3 * 4..3 * 5].try_into().unwrap()),
+            pos_x: i24::from_be_bytes(array[3 * 5..3 * 6].try_into().unwrap()),
+            zoom: u24::from_be_bytes(array[3 * 6..3 * 7].try_into().unwrap()),
+            focus: u24::from_be_bytes(array[3 * 7..3 * 8].try_into().unwrap()),
             userdefined: u16::from_be_bytes(array[3 * 8..].try_into().unwrap()),
         };
 
@@ -756,8 +756,6 @@ fn serialisei24array(array: &[ux::i24]) -> Vec<u8> {
 
 #[cfg(test)]
 mod test {
-    use std::task::Poll;
-
     use super::*;
 
     #[test]
@@ -776,6 +774,33 @@ mod test {
         let y: i24 = i24::new(0x000001);
 
         let _ = x + y;
+    }
+
+    #[test]
+    fn u24_from_be_bytes() {
+        let x: u24 = u24::new(0x001234);
+
+        let xarray: [u8; 3] = [0x00, 0x12, 0x34];
+
+        let y = ux::u24::from_be_bytes(xarray);
+
+        assert_eq!(x, y);
+    }
+
+    #[test]
+    fn i24_from_be_bytes() {
+        let mut x: i24 = i24::new(0x001234);
+        let mut xarray: [u8; 3] = [0x00, 0x12, 0x34];
+        let mut y = ux::i24::from_be_bytes(xarray);
+
+        assert_eq!(x, y);
+
+        x = i24::new(-1000);
+        let i32array = (-1000_i32).to_be_bytes();
+
+        let i24array: [u8; 3] = i32array[1..].try_into().unwrap();
+        y = ux::i24::from_be_bytes(i24array);
+        assert_eq!(x,y);
     }
 
     #[test]
@@ -839,7 +864,7 @@ mod test {
             numtargetsseen: 8,
             numtargetsidentified: 8,
             numtargetsused: 4,
-            rmserror: u24::new(0),
+            rmserror: u24::new(454555),
         };
 
         let serial = payload.serialise();
@@ -851,6 +876,8 @@ mod test {
         assert_eq!(serial[2], SystemStatus::SYSTEM_NORMAL as u8);
 
         assert_eq!(serial[6], 3);
+
+        assert_eq!(u24::from_be_bytes(serial[10..].try_into().unwrap()), payload.rmserror);
     }
 
 
@@ -975,6 +1002,29 @@ mod test {
     }
 
     #[test]
+    fn targetdatapayload_deserialise() {
+        let testflags = 60606;
+
+        let payload = TargetDataPayload {
+            studioid: 25,
+            targetnumber: 10404,
+            targetx: i24::new(-500),
+            targety: i24::new(-44545),
+            targetz: i24::new(4040404),
+            targetflags: i24::new(testflags),
+        };
+
+        let serial = payload.serialise();
+
+        if let Ok(deserialised) = TargetDataPayload::deserialise(&serial) {
+            assert_eq!(payload, deserialised);
+        }
+        else {
+            assert!(false);
+        }
+    }
+
+    #[test]
     fn imagedatapayload_serialise() {
         let payload = ImageDataPayload {
             targetindex: 250,
@@ -987,6 +1037,27 @@ mod test {
         let serial = payload.serialise();
 
         assert_eq!(serial.len(), 18 - 3);
+    }
+
+    #[test]
+    fn imagedatapayload_deserialise() {
+        let payload = ImageDataPayload {
+            targetindex: 250,
+            targetnum: 30505,
+            targetx: i24::new(-44545),
+            targety: i24::new(-4114444),
+            xerror: i24::new(-43422),
+            yerror: i24::new(344),
+        };
+        let serial = payload.serialise();
+
+        if let Ok(deserialised) = ImageDataPayload::deserialise(&serial) {
+            assert_eq!(deserialised, payload);
+        }
+        else {
+            assert!(false);
+        }
+
     }
 
     #[allow(non_snake_case)]
@@ -1005,6 +1076,24 @@ mod test {
 
     #[allow(non_snake_case)]
     #[test]
+    fn EEPROMdatapayload_deserialise() {
+        let payload = EEPROMDataPayload {
+            EEPROMaddress: 0xFFAA,
+            EEPROMdata: [0x00, 0x00, 0xFF, 0xA1, 0xFF, 0x12, 0x00, 0x44, 0x00, 0x00, 0x11, 0x44, 0xCA, 0x55, 0xAB, 0x43],
+        };
+
+        let serial = payload.serialise();
+    
+        if let Ok(deserialised) = EEPROMDataPayload::deserialise(&serial) {
+            assert_eq!(deserialised, payload);
+        }    
+        else {
+            assert!(false)
+        }
+    }
+
+    #[allow(non_snake_case)]
+    #[test]
     fn EEPROMDataRequestPayload_serialise() {
         let payload = EEPROMDataRequestPayload {
             EEPROMaddress: 0xAAFF
@@ -1014,6 +1103,23 @@ mod test {
         assert_eq!(serial.len(), 5 - 3);
 
     }  
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn EEPROMdatarequestpayload_deserialise() {
+        let payload = EEPROMDataRequestPayload {
+            EEPROMaddress: 0xAAFF
+        };
+
+        let serial = payload.serialise();
+
+        if let Ok(deserialise) = EEPROMDataRequestPayload::deserialise(&serial) {
+            assert_eq!(deserialise, payload);
+        }
+        else {
+            assert!(false);
+        }
+    }
 
     #[test]
     fn cameracalibrationpayload_serialise() {
@@ -1035,6 +1141,30 @@ mod test {
     }
 
     #[test]
+    fn cameracalibrationpayload_deserialise() {
+        let payload = CameraCalibrationPayload {
+            lenscentrex: i24::new(444),
+            lenscentrey: i24::new(44433),
+            lensscalex: i24::new(12),
+            lensscaley: i24::new(-33),
+            lensdistortiona: i24::new(1010),
+            lensdistortionb: i24::new(-3000),
+            xoffset: i24::new(101010),
+            yoffset: i24::new(-440),
+            zoffset: i24::new(100000),
+        };
+
+        let serial = payload.serialise();
+
+        if let Ok(deserialise) = CameraCalibrationPayload::deserialise(&serial) {
+            assert_eq!(deserialise, payload);
+        }
+        else {
+            assert!(false);
+        }
+    }
+
+    #[test]
     fn diagnosticmodepayload_serialise() {
         let payload = DiagnosticModePayload {
             diagnosticflag: DiagnosticModes::NORMAL_OPERATION
@@ -1047,6 +1177,22 @@ mod test {
         let flag:DiagnosticModes = serial[0].try_into().expect("Serialised diagnostic flag is valid");
 
         assert_eq!(flag, DiagnosticModes::NORMAL_OPERATION);
+    }
+
+    #[test]
+    fn diagnosticmodepayload_deserialise() {
+        let payload = DiagnosticModePayload {
+            diagnosticflag: DiagnosticModes::NORMAL_OPERATION
+        };
+
+        let serial = payload.serialise();
+
+        if let Ok(deserialise) = DiagnosticModePayload::deserialise(&serial) {
+            assert_eq!(payload, deserialise);
+        }
+        else {
+            assert!(false);
+        }
     }
 
     /*
@@ -1072,7 +1218,7 @@ mod test {
         };
 
         let serial = payload.serialise();
-        println!("{:?}", serial);
+        // println!("{:?}", serial);
 
         let testpitchbytes = testpitch.to_be_bytes();
 
@@ -1101,6 +1247,33 @@ mod test {
         assert_eq!(slice.len(), 3);
         finalvals[1..].clone_from_slice(slice);
         assert_eq!(u32::from_be_bytes(finalvals), testfocus);
+    }
+
+    #[test]
+    fn positionpollpayload_deserialise() {
+
+        let payload = PositionPollPayload {
+            pitch: i24::new(1020203),
+            yaw: i24::new(-220),
+            roll: i24::new(50505),
+            pos_z: i24::new(-1000),
+            pos_y: i24::new(1000),
+            pos_x: i24::new(22022),
+            zoom: u24::new(10),
+            focus: u24::new(4096),
+            userdefined: 0xFFAA,
+        };
+
+        let serial = payload.serialise();
+
+
+        if let Ok(deserialised) = PositionPollPayload::deserialise(&serial) {
+            assert_eq!(deserialised, payload);
+        }
+        else {
+            assert!(false);
+        }
+
     }
 
     #[test]
@@ -1189,7 +1362,7 @@ mod test {
 
         let deserialised: Message<PositionPollPayload> = deserialise(&serial).unwrap();
 
-        let _p: PositionPollPayload = deserialised.payload.try_into().unwrap(); 
+       assert_eq!(payload, deserialised.payload)
         
     }
 }
