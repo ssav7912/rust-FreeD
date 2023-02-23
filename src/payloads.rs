@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::common::*;
+use crate::error::*;
 
 use std::alloc::System;
 use std::vec;
@@ -9,9 +10,9 @@ use ux::i24;
 use ux::u24;
 
 
-
+#[derive(Copy, Clone, Debug, PartialEq)]
 ///Convenience enum for all the payload types. 
-enum Payloads {
+pub enum Payloads {
     PollPayload(PollPayload),
     PositionPollPayload(PositionPollPayload),
     SystemStatusPayload(SystemStatusPayload),
@@ -24,6 +25,25 @@ enum Payloads {
     DiagnosticModePayload(DiagnosticModePayload),
 }
 
+
+impl std::fmt::Display for Payloads {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Payloads::PollPayload(_) => "Poll Payload",
+            Payloads::PositionPollPayload(_) => "Position Poll Payload",
+            Payloads::SystemStatusPayload(_) => "System Status Payload",
+            Payloads::SystemControlPayload(_) => "System Control Payload",
+            Payloads::TargetDataPayload(_) => "Target Data Payload",
+            Payloads::ImageDataPayload(_) => "Image Data Payload",
+            Payloads::EEPROMDataPayload(_) => "EEPROM Data Payload",
+            Payloads::EEPROMDataRequestPayload(_) => "EEPROM Data Request Payload",
+            Payloads::CameraCalibrationPayload(_) => "Camera Calibration Payload",
+            Payloads::DiagnosticModePayload(_) => "Diagnostic Mode Payload"
+    
+        })
+    
+    }
+}
 
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -486,8 +506,7 @@ impl Deserialise for DiagnosticModePayload {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 ///Struct containing camera location information for a `0xD1` `POSITION_POLL` request. 
 /// Note that most fields are 24 bit (as required by the protocol spec) - this will panic if you
 /// attempt to place too large or small values into it. Use the `u24::new()` (or `i24::new()`) function to generate values
@@ -710,22 +729,25 @@ fn generate_checksum(serialised: &[u8]) -> u8 {
 }
 
 impl Message<TargetDataPayload> {
-    fn set_command(&mut self, command: Commands) {
+    fn set_command(&mut self, command: Commands) -> Result<(),InvalidCommand> {
         if command != Commands::FIRST_TARGET || command != Commands::NEXT_TARGET {
-            panic!(
-                "Only FIRST_TARGET or NEXT_TARGET commands may be used with a TargetDataPayload"
+            return Err(
+                InvalidCommand {allowedcommands: (Commands::FIRST_TARGET, Commands::NEXT_TARGET), payload: Payloads::TargetDataPayload(self.payload)}
             );
         }
         self.command = command;
+        Ok(())
     }
 }
 
 impl Message<ImageDataPayload> {
-    fn set_command(&mut self, command: Commands) {
+    fn set_command(&mut self, command: Commands) -> Result<(), InvalidCommand> {
         if command != Commands::FIRST_IMAGE || command != Commands::NEXT_IMAGE {
-            panic!("Only FIRST_IMAGE or NEXT_IMAGE commands may be used with an ImageDataPayload");
+            return Err( InvalidCommand {allowedcommands: (Commands::FIRST_IMAGE, Commands::NEXT_IMAGE), payload: Payloads::ImageDataPayload(self.payload)})
+            
         }
         self.command = command;
+        Ok(())
     }
 }
 

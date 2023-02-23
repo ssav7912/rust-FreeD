@@ -1,5 +1,6 @@
 #[allow(dead_code)]
 pub mod payloads;
+pub mod error;
 
 pub mod common {
     use std::{fmt::{self, Display}, alloc::System};
@@ -18,26 +19,11 @@ pub mod common {
         // type Output;
         ///Deserialises an arbitrary array into the associated `Output` payload type, 
         /// or returns an error if this was not possible for some reason.
-        fn deserialise(array: &[u8]) -> Result<Self, DeserialiseError> where Self: Sized;
+        fn deserialise(array: &[u8]) -> Result<Self, crate::error::DeserialiseError> where Self: Sized;
     }
 
     pub trait FromBytes<const A: usize> {
         fn from_be_bytes(arr: [u8; A]) -> Self;
-    }
-
-    #[derive(Debug, Clone)]
-    pub struct DeserialiseError {
-        pub description: String,
-    }
-    impl DeserialiseError {
-        pub fn length_template(length: usize, payload: &str) -> String {
-            return format!("Misformed data - the array must be exactly {} bytes for the payload type: {}", length, payload);
-        }
-    }
-    impl fmt::Display for DeserialiseError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "{}", self.description)
-        }
     }
 
     ///NewType wrapper for RMS error - each unit is 1/32768th of a pixel.
