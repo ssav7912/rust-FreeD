@@ -1,11 +1,11 @@
-# Free-D Rust Protocol
+# Free-D Protocol Rust Implementation 
+
+This aims to provide a library of all the types used by the FreeD protocol, in rich Rust semantics, for interacting with free-d hardware or simulating it for your own implementations.
 
 I found that there were very few public implementations of the Free-D protocol available, and none that implemented the entire protocol.
 
-This aims to provide a library of all the types used by the FreeD protocol, in rich Rust semantics, for interacting with free-d hardware
-or simulating it for your own implementations.
 
-Current Payload implementations:
+Current Payload implementations, as per the spec:
 - `PollPayload`
 - `PositionPollPayload`
 - `SystemStatusPayload`
@@ -16,6 +16,8 @@ Current Payload implementations:
 - `EEPROMDataRequestPayload`
 - `CameraCalibrationPayload`
 - `DiagnosticModePayload`
+
+These are designed to be wrapped in a `Message<T: Serialise + Deserialise>` struct, which appends the command tag and camera information, alongside a checksum before serialisation. Likewise deserialised data is returned as a `Message<T>`, which the payload may be extracted from.
 
 There is also a simple `Serialise` and `Deserialise` trait interface implemented for all payloads, so that data may be sent over UDP or
 serial interfaces.
@@ -45,4 +47,4 @@ let serial: Vec<u8> = message.serialise();
 //send the data!
 Send(serial, port, address);
 ```
-
+Deserialising data to Payload types is a little more complicated, requiring a match on the command byte in the incoming message. I am open to suggestions or PRs that will improve these ergonomics. 
