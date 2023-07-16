@@ -48,3 +48,21 @@ let serial: Vec<u8> = message.serialise();
 Send(serial, port, address);
 ```
 Deserialising data to Payload types is a little more complicated, requiring a match on the command byte in the incoming message. I am open to suggestions or PRs that will improve these ergonomics. 
+
+```rust
+let command: Commands = get_command_type(messagebuffer);
+
+if command == Commands::POSITION_POLL 
+{
+    let payload: Message<PositionPollPayload> = deserialise(messagebuffer);
+
+    //do stuff with the position payload
+}
+else if command == Commands::SYSTEM_STATUS
+{
+    let payload: Message<SystemStatusPayload> = deserialise(messagebuffer);
+    //do stuff with the system status payload
+}
+
+
+```

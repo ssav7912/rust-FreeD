@@ -662,6 +662,30 @@ fn deserialise<T: Serialise + Default + Deserialise>(data: &[u8]) -> Result<Mess
     return Ok(Message::<T> {command: command, cameraid: cameraid, payload: payload, checksum: checksum})
 }
 
+/// Queries the command type for an arbitrary message. Asserts that the message is at least well-formed (correct size, valid checksum)
+/// Match on the result of this in order to deserialise into a specific type. 
+fn command_type(data: &[u8]) -> Result<Commands, DeserialiseError> {
+    if data.len() < 4 
+    {
+        return Err(DeserialiseError {
+            description: "Misformed data - the protocol defines no messages smaller than 4 bytes"
+                .to_string(),
+        });
+    }
+
+    let checksum = data[data.len()-1];
+    if generate_checksum(&data) != checksum {
+        return Err(DeserialiseError { description: "Misformed data - checksum is incorrect.".to_string() }),
+    };
+
+    let command: Commands = match data[0].try_into()
+    {
+        Ok(x) => x,
+        Err(x) => return Err(DeserialiseError { description:x }),
+    };
+
+    return Ok(command);
+}
 
 ///Message type for serialising and deserialising protocol messages. 
 /// Once you have selected and filled out a payload struct, it can be wrapped
